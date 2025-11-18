@@ -1,0 +1,60 @@
+{
+  "symbols": [
+    "BTC-USD",
+    "^NSEI"
+  ],
+  "intervals": [
+    "1m",
+    "5m",
+    "1h"
+  ],
+  "updateIntervalMinutes": 1,
+  "candlesPerInterval": {
+    "1m": "1d",
+    "5m": "1d",
+    "1h": "1d"
+  },
+  "fetchOnceCandle": {
+    "1m": "2d",
+    "5m": "7d",
+    "1h": "15d"
+  },
+  "timeframeWeights": {
+    "1m": 0.35,
+    "5m": 0.45,
+    "1h": 0.2
+  },
+  "indicators": {
+    "rsi": {
+      "period": 14
+    },
+    "macd": {
+      "fast": 12,
+      "slow": 26,
+      "signal": 9
+    },
+    "adx": {
+      "period": 14
+    },
+    "supertrend": [
+      {
+        "period": 7,
+        "multiplier": 3
+      },
+      {
+        "period": 10,
+        "multiplier": 2
+      }
+    ],
+    "sumit_ma": {
+      "ma9": 9,
+      "ma51": 51,
+      "ma101": 101,
+      "ma201": 201
+    },
+    "smoothing": {
+      "sma9": 9,
+      "sma21": 21
+    }
+  }
+}
