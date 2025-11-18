@@ -3,7 +3,7 @@ from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from routes.dashboard import dashboard_bp
 from routes.symbol import symbol_bp
-from utils.scheduler import update_all_data
+from utils.scheduler import update_all_data, fetch_initial_data
 import json
 import atexit
 
@@ -16,6 +16,13 @@ with open('config.json', 'r') as f:
 app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
 app.register_blueprint(symbol_bp, url_prefix='/api/symbol')
 
+# Fetch initial historical data ONCE at startup
+print("\n" + "="*50)
+print("🚀 STARTING TRADING DASHBOARD")
+print("="*50)
+fetch_initial_data()
+
+# Setup scheduler for regular updates
 scheduler = BackgroundScheduler()
 scheduler.add_job(
     func=update_all_data,
@@ -23,8 +30,6 @@ scheduler.add_job(
     minutes=config.get('updateIntervalMinutes', 1)
 )
 scheduler.start()
-
-update_all_data()
 
 atexit.register(lambda: scheduler.shutdown())
 

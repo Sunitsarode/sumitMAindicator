@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 def calculate_sma(series, period):
     """Simple Moving Average"""
@@ -10,7 +11,7 @@ def calculate_sumit_ma(df, ma9=9, ma51=51, ma101=101, ma201=201):
     A = (MA9 + MA51)/2
     B = (MA51 + MA101)/2
     C = (MA101 + MA201)/2
-    D = (A+C)/2*B
+    D = ((A+C)/2)*B
     
     Returns normalized score 0-100
     """
@@ -25,6 +26,19 @@ def calculate_sumit_ma(df, ma9=9, ma51=51, ma101=101, ma201=201):
     D = ((A + C) / 2) * B
     
     current_price = df['Close']
-    normalized = ((D / current_price) - 0.5) * 100 + 50
     
-    return normalized.clip(0, 100)
+    # Create result series
+    normalized = pd.Series(index=df.index, dtype=float)
+    
+    # Only calculate where we have valid data and non-zero price
+    valid_mask = (
+        ~D.isna() & 
+        ~current_price.isna() & 
+        (current_price > 0)
+    )
+    
+    if valid_mask.any():
+        normalized[valid_mask] = ((D[valid_mask] / current_price[valid_mask]) - 0.5) * 100 + 50
+        normalized = normalized.clip(0, 100)
+    
+    return normalized
