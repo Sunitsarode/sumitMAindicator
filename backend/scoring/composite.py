@@ -6,14 +6,14 @@ from indicators.adx import calculate_adx, score_adx
 from indicators.supertrend import calculate_supertrend, score_supertrend
 from indicators.sumit_ma import calculate_sumit_ma
 
-def calculate_all_indicators(df, config):
+def calculate_all_indicators(df, config, ath_atl_data=None):
     """Calculate all indicators and return scored DataFrame with error handling"""
     
     # Minimum data requirements
     min_required = max(
         config['indicators']['rsi']['period'],
         config['indicators']['adx']['period'],
-        config['indicators']['sumit_ma']['ma201'],
+        config['indicators']['sumit_ma']['ma-4'],
         max([st['period'] for st in config['indicators']['supertrend']])
     )
     
@@ -77,18 +77,28 @@ def calculate_all_indicators(df, config):
     except Exception as e:
         print(f"Supertrend calculation error: {e}")
     
-    # Sumit MA - needs 201+ candles
+    # Sumit MA - needs ma-4+ candles, returns DataFrame with multiple scores
     try:
-        if len(df) >= config['indicators']['sumit_ma']['ma201']:
-            sumit_scores = calculate_sumit_ma(
+        if len(df) >= config['indicators']['sumit_ma']['ma-4']:
+            sumit_result = calculate_sumit_ma(
                 df,
-                config['indicators']['sumit_ma']['ma9'],
-                config['indicators']['sumit_ma']['ma51'],
-                config['indicators']['sumit_ma']['ma101'],
-                config['indicators']['sumit_ma']['ma201']
+                config['indicators']['sumit_ma']['ma-1'],
+                config['indicators']['sumit_ma']['ma-2'],
+                config['indicators']['sumit_ma']['ma-3'],
+                config['indicators']['sumit_ma']['ma-4'],
+                ath_atl_data=ath_atl_data  # Pass ATH/ATL data
             )
-            scores['sumit_ma_score'] = sumit_scores
-            print(f"✓ Sumit MA: {sumit_scores.notna().sum()} valid scores")
+            # Add all ratio scores to the main scores DataFrame
+            scores['sumit_ratio1_score'] = sumit_result['sumit_ratio1_score']
+            scores['sumit_ratio2_score'] = sumit_result['sumit_ratio2_score']
+            scores['sumit_ratio3_score'] = sumit_result['sumit_ratio3_score']
+            scores['sumit_ma_score'] = sumit_result['sumit_ma_score']
+            
+            valid_count = sumit_result['sumit_ma_score'].notna().sum()
+            if ath_atl_data:
+                print(f"✓ Sumit MA (ATH/ATL normalized): {valid_count} valid scores")
+            else:
+                print(f"✓ Sumit MA: {valid_count} valid scores")
         else:
             print(f"⚠ Sumit MA skipped: {len(df)} candles < 201 required")
     except Exception as e:

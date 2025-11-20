@@ -1,44 +1,80 @@
 import React, { useState } from 'react';
-import Dashboard from './Dashboard';
-import SymbolCharts from './SymbolCharts';
+import Dashboard from './pages/Dashboard';
+import LiveAnalysis from './pages/LiveAnalysis';
+import Charts from './pages/Charts';
 
 const App = () => {
-  const [view, setView] = useState('dashboard');
+  const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedSymbol, setSelectedSymbol] = useState(null);
 
-  const handleSymbolClick = (symbol) => {
+  const handleSymbolSelect = (symbol) => {
     setSelectedSymbol(symbol);
-    setView('symbol');
+    setCurrentPage('charts');
   };
 
-  const handleBackToDashboard = () => {
-    setView('dashboard');
-    setSelectedSymbol(null);
+  const handleLiveAnalysisSelect = (symbol) => {
+    setSelectedSymbol(symbol);
+    setCurrentPage('live');
   };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-4">
-        <div className="flex items-center gap-4">
-          {view === 'symbol' && (
-            <button 
-              onClick={handleBackToDashboard} 
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"
-            >
-              ← Back
-            </button>
-          )}
-          <h1 className="text-2xl font-bold">
-            {view === 'dashboard' ? 'Trading Dashboard' : `${selectedSymbol} Analysis`}
-          </h1>
+      {/* Navigation Bar */}
+      <nav className="bg-gray-800 border-b border-gray-700">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">Trading Dashboard</h1>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage('dashboard')}
+                className={`px-4 py-2 rounded-lg transition font-semibold ${
+                  currentPage === 'dashboard'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                📊 Dashboard
+              </button>
+              <button
+                onClick={() => setCurrentPage('live')}
+                className={`px-4 py-2 rounded-lg transition font-semibold ${
+                  currentPage === 'live'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                🔴 Live Analysis
+              </button>
+              <button
+                onClick={() => setCurrentPage('charts')}
+                className={`px-4 py-2 rounded-lg transition font-semibold ${
+                  currentPage === 'charts'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+                disabled={!selectedSymbol}
+              >
+                📈 Charts {selectedSymbol && `(${selectedSymbol})`}
+              </button>
+            </div>
+          </div>
         </div>
-      </header>
+      </nav>
 
+      {/* Page Content */}
       <main className="p-6">
-        {view === 'dashboard' ? (
-          <Dashboard onSymbolClick={handleSymbolClick} />
-        ) : (
-          <SymbolCharts symbol={selectedSymbol} onBack={handleBackToDashboard} />
+        {currentPage === 'dashboard' && (
+          <Dashboard 
+            onSymbolClick={handleSymbolSelect}
+            onLiveClick={handleLiveAnalysisSelect}
+          />
+        )}
+        {currentPage === 'live' && (
+          <LiveAnalysis symbol={selectedSymbol} />
+        )}
+        {currentPage === 'charts' && (
+          <Charts symbol={selectedSymbol} />
         )}
       </main>
     </div>

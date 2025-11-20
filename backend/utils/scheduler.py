@@ -4,6 +4,7 @@ from data.fetcher import fetch_data
 from scoring.composite import calculate_all_indicators, calculate_composite_scores
 from scoring.smoothing import apply_sma_smoothing
 from utils.cache import update_cache
+from utils.ath_atl import calculate_ath_atl, get_ath_atl
 
 def load_config():
     with open('config.json', 'r') as f:
@@ -23,13 +24,17 @@ def fetch_initial_data():
                 df = fetch_data(symbol, interval, period)
                 
                 if df is not None and not df.empty:
+                    # Calculate ATH/ATL and dynamic sensitivity
+                    ath_atl_data = calculate_ath_atl(df, symbol, interval)
+                    
                     # Need minimum candles for indicators
-                    min_required = 201  # For Sumit MA (MA201)
+                    min_required = 201  # For MA-4
                     
                     if len(df) < min_required:
                         print(f"⚠ {symbol} at {interval}: Only {len(df)} candles (need {min_required}), processing anyway...")
                     
-                    scores = calculate_all_indicators(df, config)
+                    # Calculate indicators with ATH/ATL data
+                    scores = calculate_all_indicators(df, config, ath_atl_data)
                     scores = calculate_composite_scores(scores, config['timeframeWeights'])
                     scores = apply_sma_smoothing(
                         scores, 
@@ -39,7 +44,7 @@ def fetch_initial_data():
                     
                     combined = df.join(scores)
                     update_cache(symbol, interval, combined)
-                    print(f"✓ {symbol} at {interval}: Loaded {len(df)} candles")
+                    print(f"✓ {symbol} at {interval}: Loaded {len(df)} candles\n")
                 else:
                     print(f"✗ {symbol} at {interval}: No data received")
                 
@@ -63,7 +68,10 @@ def update_all_data():
                 df = fetch_data(symbol, interval, period)
                 
                 if df is not None and not df.empty:
-                    scores = calculate_all_indicators(df, config)
+                    # Get existing ATH/ATL data (already calculated at startup)
+                    ath_atl_data = get_ath_atl(symbol, interval)
+                    
+                    scores = calculate_all_indicators(df, config, ath_atl_data)
                     scores = calculate_composite_scores(scores, config['timeframeWeights'])
                     scores = apply_sma_smoothing(
                         scores, 
