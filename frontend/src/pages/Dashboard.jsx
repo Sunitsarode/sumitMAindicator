@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 
 const Dashboard = ({ onSymbolClick, onLiveClick }) => {
   const [dashboardData, setDashboardData] = useState([]);
+  const [symbolsFullData, setSymbolsFullData] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -12,6 +13,28 @@ const Dashboard = ({ onSymbolClick, onLiveClick }) => {
       if (!response.ok) throw new Error('Failed to fetch dashboard data');
       const data = await response.json();
       setDashboardData(data);
+      
+      // Fetch full data for each symbol to get predictions
+      const fullDataPromises = data.map(async (symbolData) => {
+        try {
+          const res = await fetch(`http://localhost:5000/api/symbol/${symbolData.symbol}`);
+          if (res.ok) {
+            const fullData = await res.json();
+            return { symbol: symbolData.symbol, data: fullData };
+          }
+        } catch (err) {
+          console.error(`Error fetching ${symbolData.symbol}:`, err);
+        }
+        return null;
+      });
+      
+      const results = await Promise.all(fullDataPromises);
+      const fullDataMap = {};
+      results.filter(r => r).forEach(r => {
+        fullDataMap[r.symbol] = r.data;
+      });
+      
+      setSymbolsFullData(fullDataMap);
       setLastUpdate(new Date());
       setLoading(false);
       setError(null);
@@ -24,7 +47,7 @@ const Dashboard = ({ onSymbolClick, onLiveClick }) => {
 
   useEffect(() => {
     fetchDashboard();
-    const interval = setInterval(fetchDashboard, 60000);
+    const interval = setInterval(fetchDashboard, 60000); // Update every minute
     return () => clearInterval(interval);
   }, []);
 
@@ -56,8 +79,8 @@ const Dashboard = ({ onSymbolClick, onLiveClick }) => {
         <h2 className="text-xl font-semibold">All Symbols Overview</h2>
         <div className="flex items-center gap-4">
           {lastUpdate && (
-            <div className="text-sm text-gray-400">
-              Last Update: {lastUpdate.toLocaleTimeString()}
+            <div className="text-sm text-gray-400 animate-pulse">
+              🔴 Live - Last Update: {lastUpdate.toLocaleTimeString()}
             </div>
           )}
           <button 
@@ -73,87 +96,222 @@ const Dashboard = ({ onSymbolClick, onLiveClick }) => {
         <div className="text-gray-400">No data available. Backend is starting up...</div>
       ) : (
         dashboardData.map((symbolData) => (
-          <div key={symbolData.symbol} className="bg-gray-800 rounded-lg overflow-hidden">
-            <div className="p-4 bg-gray-750 border-b border-gray-700 flex items-center justify-between">
-              <h3 className="text-lg font-bold">{symbolData.symbol}</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => onLiveClick(symbolData.symbol)}
-                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm font-semibold"
-                >
-                  🔴 Live
-                </button>
-                <button
-                  onClick={() => onSymbolClick(symbolData.symbol)}
-                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold"
-                >
-                  📈 Charts
-                </button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-750 text-left">
-                    <th className="px-4 py-3">Interval</th>
-                    <th className="px-4 py-3">Price</th>
-                    <th className="px-4 py-3">RSI</th>
-                    <th className="px-4 py-3">MACD</th>
-                    <th className="px-4 py-3">ADX</th>
-                    <th className="px-4 py-3">Supertrend</th>
-                    <th className="px-4 py-3">Avg Score</th>
-                    <th className="px-4 py-3">O →</th>
-                    <th className="px-4 py-3">H ↑</th>
-                    <th className="px-4 py-3">L ↓</th>
-                    <th className="px-4 py-3">C ←</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(symbolData.intervals).map(([interval, scores]) => {
-                    const predictions = calculatePredictions(scores);
-                    return (
-                      <tr key={interval} className="border-t border-gray-700 hover:bg-gray-750">
-                        <td className="px-4 py-3 font-semibold">{interval}</td>
-                        <td className="px-4 py-3">{scores.price.toFixed(2)}</td>
-                        <td className="px-4 py-3"><ScoreBadge score={scores.rsi_score} /></td>
-                        <td className="px-4 py-3"><ScoreBadge score={scores.macd_score} /></td>
-                        <td className="px-4 py-3"><ScoreBadge score={scores.adx_score} /></td>
-                        <td className="px-4 py-3"><ScoreBadge score={scores.supertrend_score} /></td>
-                        <td className="px-4 py-3"><ScoreBadge score={scores.avg_score} /></td>
-                        <td className="px-4 py-3 text-sm text-gray-300">{predictions.open}</td>
-                        <td className="px-4 py-3 text-sm text-green-400">{predictions.high}</td>
-                        <td className="px-4 py-3 text-sm text-red-400">{predictions.low}</td>
-                        <td className="px-4 py-3 text-sm text-blue-400">{predictions.close}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <SymbolCard 
+            key={symbolData.symbol}
+            symbolData={symbolData}
+            fullData={symbolsFullData[symbolData.symbol]}
+            onSymbolClick={onSymbolClick}
+            onLiveClick={onLiveClick}
+          />
         ))
       )}
     </div>
   );
 };
 
-const calculatePredictions = (scores) => {
-  // Simple prediction based on current price and avg score
-  const price = scores.price;
-  const avgScore = scores.avg_score;
+const SymbolCard = ({ symbolData, fullData, onSymbolClick, onLiveClick }) => {
+  const intervals = ['1m', '5m', '1h'];
+  const predictions = {};
   
-  // Estimate movement based on score (simplified)
-  const movement = ((avgScore - 50) / 50) * (price * 0.02); // 2% max movement
-  
-  return {
-    open: (price + movement * 0.5).toFixed(2),
-    high: (price + Math.abs(movement)).toFixed(2),
-    low: (price - Math.abs(movement)).toFixed(2),
-    close: (price + movement).toFixed(2)
-  };
+  // Calculate predictions for all intervals
+  if (fullData) {
+    intervals.forEach(interval => {
+      const candles = fullData[interval] || [];
+      const last10 = candles.slice(-10);
+      
+      if (last10.length >= 2) {
+        const calculateSMA = (arr, field) => {
+          const values = arr.map(c => parseFloat(c[field]) || 0).filter(v => v > 0);
+          return values.reduce((a, b) => a + b, 0) / values.length;
+        };
+
+        const sma9_H = calculateSMA(last10, 'High');
+        const sma9_L = calculateSMA(last10, 'Low');
+        const sma9_O = calculateSMA(last10, 'Open');
+        const sma9_C = calculateSMA(last10, 'Close');
+        const sma9_HLOC = (sma9_H + sma9_L + sma9_O + sma9_C) / 4;
+
+        const current = candles[candles.length - 1];
+        const currentClose = parseFloat(current.Close) || 0;
+        const currentOpen = parseFloat(current.Open) || 0;
+
+        const diffH = sma9_H - sma9_O;
+        const diffL = sma9_L - sma9_O;
+        const diffC = sma9_C - sma9_O;
+        const diffHLOC = sma9_HLOC - sma9_O;
+
+        predictions[interval] = {
+          current: currentClose,
+          open: currentClose + diffHLOC,
+          high: currentClose + diffH,
+          low: currentClose + diffL,
+          close: currentClose + diffC,
+          isBullish: currentClose > currentOpen,
+          sma9_HLOC: sma9_HLOC
+        };
+      }
+    });
+  }
+
+  return (
+    <div className="bg-gray-800 rounded-lg overflow-hidden">
+      <div className="p-4 bg-gray-750 border-b border-gray-700 flex items-center justify-between">
+        <h3 className="text-lg font-bold">{symbolData.symbol}</h3>
+        <div className="flex gap-2">
+          <button
+            onClick={() => onLiveClick(symbolData.symbol)}
+            className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-sm font-semibold"
+          >
+            🔴 Live
+          </button>
+          <button
+            onClick={() => onSymbolClick(symbolData.symbol)}
+            className="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm font-semibold"
+          >
+            📈 Charts
+          </button>
+        </div>
+      </div>
+      
+      <div className="p-4">
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          {intervals.map(interval => {
+            const scores = symbolData.intervals[interval];
+            const pred = predictions[interval];
+            
+            return (
+              <div key={interval} className="bg-gray-750 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-lg">{interval}</h4>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-400">Price</div>
+                    <div className="text-lg font-bold text-blue-400">
+                      {scores?.price?.toFixed(2) || 'N/A'}
+                    </div>
+                  </div>
+                </div>
+                
+                {pred ? (
+                  <MiniCandlestick 
+                    open={pred.open}
+                    high={pred.high}
+                    low={pred.low}
+                    close={pred.close}
+                    avgLine={pred.sma9_HLOC}
+                    isBullish={pred.isBullish}
+                  />
+                ) : (
+                  <div className="text-center text-gray-500 text-sm py-4">
+                    Loading prediction...
+                  </div>
+                )}
+                
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-xs text-gray-400">RSI</div>
+                    <ScoreBadge score={scores?.rsi_score} small />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">MACD</div>
+                    <ScoreBadge score={scores?.macd_score} small />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">ADX</div>
+                    <ScoreBadge score={scores?.adx_score} small />
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">ST</div>
+                    <ScoreBadge score={scores?.supertrend_score} small />
+                  </div>
+                </div>
+                
+                <div className="mt-3 pt-3 border-t border-gray-700">
+                  <div className="text-xs text-gray-400 mb-1">Avg Score</div>
+                  <ScoreBadge score={scores?.avg_score} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const ScoreBadge = ({ score }) => {
+const MiniCandlestick = ({ open, high, low, close, avgLine, isBullish }) => {
+  const svgHeight = 150;
+  const svgWidth = 100;
+  const padding = 15;
+  
+  const priceRange = high - low;
+  const scale = (svgHeight - 2 * padding) / priceRange;
+  
+  const toY = (price) => svgHeight - padding - (price - low) * scale;
+  
+  const openY = toY(open);
+  const highY = toY(high);
+  const lowY = toY(low);
+  const closeY = toY(close);
+  const avgY = toY(avgLine);
+  
+  const bodyTop = Math.min(openY, closeY);
+  const bodyHeight = Math.abs(openY - closeY) || 1;
+  const bodyWidth = 20;
+  const centerX = svgWidth / 2;
+  
+  const color = isBullish ? '#10b981' : '#ef4444';
+  
+  return (
+    <div className="flex justify-center">
+      <svg width={svgWidth} height={svgHeight}>
+        {/* Wick */}
+        <line 
+          x1={centerX} 
+          y1={highY} 
+          x2={centerX} 
+          y2={lowY} 
+          stroke={color} 
+          strokeWidth="1.5"
+        />
+        
+        {/* Body */}
+        <rect 
+          x={centerX - bodyWidth / 2} 
+          y={bodyTop} 
+          width={bodyWidth} 
+          height={bodyHeight} 
+          fill={color}
+          stroke={color}
+        />
+        
+        {/* Average line */}
+        <line 
+          x1={padding} 
+          y1={avgY} 
+          x2={svgWidth - padding} 
+          y2={avgY} 
+          stroke="#3b82f6" 
+          strokeWidth="1.5"
+          strokeDasharray="3,3"
+        />
+        
+        {/* Price labels */}
+        <text x="5" y={highY} fill="#9ca3af" fontSize="9">{high.toFixed(1)}</text>
+        <text x="5" y={lowY} fill="#9ca3af" fontSize="9">{low.toFixed(1)}</text>
+        
+        {/* OHLC markers */}
+        <circle cx={centerX} cy={openY} r="2" fill="#10b981" />
+        <circle cx={centerX} cy={closeY} r="2" fill="#ef4444" />
+      </svg>
+    </div>
+  );
+};
+
+const ScoreBadge = ({ score, small = false }) => {
+  if (score === undefined || score === null) {
+    return <span className="text-gray-500 text-xs">N/A</span>;
+  }
+  
   const getColor = (val) => {
     if (val >= 80) return 'bg-red-500';
     if (val >= 60) return 'bg-orange-500';
@@ -162,8 +320,10 @@ const ScoreBadge = ({ score }) => {
     return 'bg-blue-500';
   };
   
+  const sizeClass = small ? 'px-2 py-0.5 text-xs' : 'px-3 py-1 text-sm';
+  
   return (
-    <span className={`px-3 py-1 rounded-full text-sm font-semibold ${getColor(score)}`}>
+    <span className={`${getColor(score)} ${sizeClass} rounded-full font-semibold inline-block`}>
       {score.toFixed(1)}
     </span>
   );

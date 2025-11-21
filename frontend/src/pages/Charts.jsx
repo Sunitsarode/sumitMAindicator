@@ -7,7 +7,6 @@ const Charts = ({ symbol }) => {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [selectedInterval, setSelectedInterval] = useState('1m');
-  const [zoomLevel, setZoomLevel] = useState(1);
   const intervals = ['1m', '5m', '1h'];
 
   const fetchSymbolData = async () => {
@@ -38,9 +37,20 @@ const Charts = ({ symbol }) => {
     fetchSymbolData();
   }, [symbol]);
 
-  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.2, 3));
-  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.2, 0.5));
-  const handleZoomReset = () => setZoomLevel(1);
+  // Format datetime like Chart 6
+  const formatDateTime = (timestamp, data, idx) => {
+    const date = new Date(timestamp);
+    const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
+    const timeStr = date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: false 
+    });
+    
+    const prevDate = idx > 0 ? new Date(data[idx - 1].timestamp) : null;
+    const showDate = idx === 0 || (prevDate && date.toDateString() !== prevDate.toDateString());
+    return showDate ? `${dateStr} : ${timeStr}` : timeStr;
+  };
 
   if (!symbol) {
     return (
@@ -97,33 +107,6 @@ const Charts = ({ symbol }) => {
         </div>
         
         <div className="flex items-center gap-4">
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-2 bg-gray-750 px-3 py-2 rounded-lg">
-            <span className="text-sm text-gray-400">Zoom:</span>
-            <button 
-              onClick={handleZoomOut}
-              className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm font-bold"
-              title="Zoom Out"
-            >
-              −
-            </button>
-            <span className="text-sm font-mono w-12 text-center">{(zoomLevel * 100).toFixed(0)}%</span>
-            <button 
-              onClick={handleZoomIn}
-              className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm font-bold"
-              title="Zoom In"
-            >
-              +
-            </button>
-            <button 
-              onClick={handleZoomReset}
-              className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm"
-              title="Reset Zoom"
-            >
-              ⟲
-            </button>
-          </div>
-
           {lastUpdate && (
             <div className="text-sm text-gray-400">
               {lastUpdate.toLocaleTimeString()}
@@ -140,10 +123,10 @@ const Charts = ({ symbol }) => {
 
       {/* Charts */}
       <ChartContainer title="Chart 1: Individual Indicator Scores">
-        <SyncedChart 
+        <ImprovedChart 
           data={symbolData} 
           interval={selectedInterval}
-          zoomLevel={zoomLevel}
+          formatDateTime={formatDateTime}
           lines={[
             { key: 'rsi_score', name: 'RSI', color: '#8884d8' },
             { key: 'macd_score', name: 'MACD', color: '#82ca9d' },
@@ -154,10 +137,10 @@ const Charts = ({ symbol }) => {
       </ChartContainer>
 
       <ChartContainer title="Chart 2: Composite Scores">
-        <SyncedChart 
+        <ImprovedChart 
           data={symbolData} 
           interval={selectedInterval}
-          zoomLevel={zoomLevel}
+          formatDateTime={formatDateTime}
           lines={[
             { key: 'avg_score', name: 'Average', color: '#8884d8' },
             { key: 'weighted_avg_score', name: 'Weighted Avg', color: '#82ca9d' }
@@ -166,10 +149,10 @@ const Charts = ({ symbol }) => {
       </ChartContainer>
 
       <ChartContainer title="Chart 3: Average Score with SMA Crossover">
-        <SyncedChart 
+        <ImprovedChart 
           data={symbolData} 
           interval={selectedInterval}
-          zoomLevel={zoomLevel}
+          formatDateTime={formatDateTime}
           lines={[
             { key: 'avg_score', name: 'Average', color: '#8884d8' },
             { key: 'avg_sma9', name: 'SMA9', color: '#82ca9d' },
@@ -179,10 +162,10 @@ const Charts = ({ symbol }) => {
       </ChartContainer>
 
       <ChartContainer title="Chart 4: Weighted Average with SMA Crossover">
-        <SyncedChart 
+        <ImprovedChart 
           data={symbolData} 
           interval={selectedInterval}
-          zoomLevel={zoomLevel}
+          formatDateTime={formatDateTime}
           lines={[
             { key: 'weighted_avg_score', name: 'Weighted Avg', color: '#8884d8' },
             { key: 'weighted_sma9', name: 'SMA9', color: '#82ca9d' },
@@ -191,26 +174,50 @@ const Charts = ({ symbol }) => {
         />
       </ChartContainer>
 
-      <ChartContainer title="Chart 5: Sumit MA Indicator (Trend Reversal Detection)">
-        <SyncedChart 
+      <ChartContainer title="Chart 5: Sumit MA - Price Position Strength (NEW LOGIC)">
+        <div className="mb-4 p-4 bg-gray-750 rounded-lg">
+          <h4 className="font-semibold mb-2">📊 How to Read This Chart:</h4>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="font-semibold text-blue-400">Blue Line (Short):</span> Position vs MA 3,9,15,21
+            </div>
+            <div>
+              <span className="font-semibold text-green-400">Green Line (Mid):</span> Position vs MA 27,51,81,101
+            </div>
+            <div>
+              <span className="font-semibold text-orange-400">Orange Line (Long):</span> Position vs MA 151,201
+            </div>
+            <div>
+              <span className="font-semibold text-purple-400">Purple Line (Overall):</span> Average of all 10 MAs
+            </div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-700">
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="text-green-400">📈 LONG: Score &gt; 70</div>
+              <div className="text-yellow-400">➡️ NEUTRAL: Score 40-60</div>
+              <div className="text-red-400">📉 SHORT: Score &lt; 30</div>
+            </div>
+          </div>
+        </div>
+        <ImprovedChart 
           data={symbolData} 
           interval={selectedInterval}
-          zoomLevel={zoomLevel}
+          formatDateTime={formatDateTime}
           lines={[
-            { key: 'sumit_ratio1_score', name: 'Ratio1 (MA-1/MA-2)', color: '#3b82f6' },
-            { key: 'sumit_ratio2_score', name: 'Ratio2 (MA-2/MA-3)', color: '#10b981' },
-            { key: 'sumit_ratio3_score', name: 'Ratio3 (MA-3/MA-4)', color: '#f59e0b' },
-            { key: 'sumit_ma_score', name: 'Average', color: '#9b59b6' }
+            { key: 'sumit_ratio1_score', name: 'Short-term (MA 3-21)', color: '#3b82f6' },
+            { key: 'sumit_ratio2_score', name: 'Mid-term (MA 27-101)', color: '#10b981' },
+            { key: 'sumit_ratio3_score', name: 'Long-term (MA 151-201)', color: '#f59e0b' },
+            { key: 'sumit_ma_score', name: 'Overall (All 10 MAs)', color: '#9b59b6' }
           ]}
-          showReversalZones={true}
+          showTradingZones={true}
         />
       </ChartContainer>
 
       <ChartContainer title="Chart 6: Price Chart (OHLC)">
-        <SyncedCandlestickChart 
+        <CandlestickChart 
           data={symbolData} 
           interval={selectedInterval}
-          zoomLevel={zoomLevel}
+          formatDateTime={formatDateTime}
         />
       </ChartContainer>
     </div>
@@ -224,30 +231,15 @@ const ChartContainer = ({ title, children }) => (
   </div>
 );
 
-const SyncedChart = ({ data, interval, lines, showReversalZones = false, zoomLevel }) => {
-  const [localZoom, setLocalZoom] = useState(1);
+const ImprovedChart = ({ data, interval, lines, showTradingZones = false, formatDateTime }) => {
   const [brushRange, setBrushRange] = useState({ startIndex: 0, endIndex: undefined });
   
   const chartData = data[interval]?.map((candle, idx) => {
     const timestamp = candle.Datetime || candle.Date || candle.index;
     const date = new Date(timestamp);
     
-    // Format: "11Oct-9:15am"
-    const dateStr = date.toLocaleDateString('en-GB', { 
-      day: '2-digit', 
-      month: 'short' 
-    }).replace(/ /g, '');
-    
-    const timeStr = date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
-    }).toLowerCase();
-    
-    const displayTime = `${dateStr}-${timeStr}`;
-    
     const cleanedData = {
-      time: displayTime,
+      time: formatDateTime(timestamp, data[interval], idx),
       timestamp: date.getTime(),
       index: idx,
     };
@@ -262,47 +254,12 @@ const SyncedChart = ({ data, interval, lines, showReversalZones = false, zoomLev
     return cleanedData;
   }).filter(item => lines.some(line => item[line.key] !== undefined)) || [];
 
-  const handleLocalZoomIn = () => setLocalZoom(prev => Math.min(prev + 0.2, 3));
-  const handleLocalZoomOut = () => setLocalZoom(prev => Math.max(prev - 0.2, 0.5));
-  const handleLocalZoomReset = () => {
-    setLocalZoom(1);
-    setBrushRange({ startIndex: 0, endIndex: undefined });
-  };
-
-  const visibleDataCount = Math.max(20, Math.ceil(chartData.length / localZoom));
-  const startIdx = brushRange.startIndex || Math.max(0, chartData.length - visibleDataCount);
+  const startIdx = brushRange.startIndex || 0;
   const endIdx = brushRange.endIndex || chartData.length;
   const visibleData = chartData.slice(startIdx, endIdx);
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-2">
-        <button 
-          onClick={handleLocalZoomOut}
-          className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm font-bold"
-          title="Zoom Out"
-        >
-          −
-        </button>
-        <span className="px-3 py-1 bg-gray-750 rounded text-sm font-mono">
-          {(localZoom * 100).toFixed(0)}%
-        </span>
-        <button 
-          onClick={handleLocalZoomIn}
-          className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm font-bold"
-          title="Zoom In"
-        >
-          +
-        </button>
-        <button 
-          onClick={handleLocalZoomReset}
-          className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-          title="Reset Zoom"
-        >
-          ⟲
-        </button>
-      </div>
-      
       <ResponsiveContainer width="100%" height={400}>
         <LineChart data={visibleData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -311,9 +268,8 @@ const SyncedChart = ({ data, interval, lines, showReversalZones = false, zoomLev
             stroke="#9ca3af"
             angle={-45}
             textAnchor="end"
-            height={90}
-            tick={{ fontSize: 10 }}
-            interval="preserveStartEnd"
+            height={80}
+            tick={{ fontSize: 11 }}
           />
           <YAxis domain={[0, 100]} stroke="#9ca3af" />
           <Tooltip 
@@ -344,16 +300,17 @@ const SyncedChart = ({ data, interval, lines, showReversalZones = false, zoomLev
             }}
           />
           
-          {showReversalZones && (
+          {showTradingZones && (
             <>
-              <ReferenceArea y1={30} y2={50} fill="#ef4444" fillOpacity={0.1} label="Bearish Reversal" />
-              <ReferenceArea y1={50} y2={70} fill="#10b981" fillOpacity={0.1} label="Bullish Reversal" />
+              <ReferenceArea y1={0} y2={30} fill="#ef4444" fillOpacity={0.1} label={{ value: "STRONG SHORT", position: "insideTopLeft", fill: "#ef4444" }} />
+              <ReferenceArea y1={70} y2={100} fill="#10b981" fillOpacity={0.1} label={{ value: "STRONG LONG", position: "insideTopLeft", fill: "#10b981" }} />
+              <ReferenceArea y1={40} y2={60} fill="#fbbf24" fillOpacity={0.05} label={{ value: "NEUTRAL", position: "center", fill: "#fbbf24" }} />
             </>
           )}
           
-          <ReferenceLine y={80} stroke="#ef4444" strokeDasharray="3 3" label="Overbought" />
+          <ReferenceLine y={70} stroke="#10b981" strokeDasharray="3 3" label="Long Zone" />
           <ReferenceLine y={50} stroke="#6b7280" strokeDasharray="3 3" label="Neutral" />
-          <ReferenceLine y={20} stroke="#10b981" strokeDasharray="3 3" label="Oversold" />
+          <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="3 3" label="Short Zone" />
           
           {lines.map(line => (
             <Line 
@@ -373,21 +330,9 @@ const SyncedChart = ({ data, interval, lines, showReversalZones = false, zoomLev
   );
 };
 
-const SyncedCandlestickChart = ({ data, interval, zoomLevel }) => {
+const CandlestickChart = ({ data, interval, formatDateTime }) => {
   const chartData = data[interval]?.map((candle, idx) => {
     const timestamp = candle.Datetime || candle.Date || candle.index;
-    const date = new Date(timestamp);
-    
-    const dateStr = date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
-    const timeStr = date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: false 
-    });
-    
-    const prevDate = idx > 0 ? new Date(data[interval][idx - 1].Datetime || data[interval][idx - 1].Date) : null;
-    const showDate = idx === 0 || (prevDate && date.toDateString() !== prevDate.toDateString());
-    const displayTime = showDate ? `${dateStr} : ${timeStr}` : timeStr;
     
     const open = parseFloat(candle.Open) || 0;
     const close = parseFloat(candle.Close) || 0;
@@ -395,7 +340,7 @@ const SyncedCandlestickChart = ({ data, interval, zoomLevel }) => {
     const low = parseFloat(candle.Low) || 0;
     
     return {
-      time: displayTime,
+      time: formatDateTime(timestamp, data[interval], idx),
       Open: open,
       Close: close,
       High: high,
@@ -403,10 +348,6 @@ const SyncedCandlestickChart = ({ data, interval, zoomLevel }) => {
       color: close >= open ? '#10b981' : '#ef4444'
     };
   }) || [];
-
-  const visibleDataCount = Math.ceil(chartData.length / zoomLevel);
-  const startIndex = Math.max(0, chartData.length - visibleDataCount);
-  const visibleData = chartData.slice(startIndex);
 
   const CustomCandlestick = (props) => {
     const { x, y, width, height, payload } = props;
@@ -416,13 +357,13 @@ const SyncedCandlestickChart = ({ data, interval, zoomLevel }) => {
     const bodyWidth = Math.max(width * 0.6, 1);
     const bodyX = x + (width - bodyWidth) / 2;
     
-    const scale = height / (Math.max(...visibleData.map(d => d.High)) - Math.min(...visibleData.map(d => d.Low)));
+    const scale = height / (Math.max(...chartData.map(d => d.High)) - Math.min(...chartData.map(d => d.Low)));
     const yMin = y + height;
     
-    const highY = yMin - (payload.High - Math.min(...visibleData.map(d => d.Low))) * scale;
-    const lowY = yMin - (payload.Low - Math.min(...visibleData.map(d => d.Low))) * scale;
-    const openY = yMin - (payload.Open - Math.min(...visibleData.map(d => d.Low))) * scale;
-    const closeY = yMin - (payload.Close - Math.min(...visibleData.map(d => d.Low))) * scale;
+    const highY = yMin - (payload.High - Math.min(...chartData.map(d => d.Low))) * scale;
+    const lowY = yMin - (payload.Low - Math.min(...chartData.map(d => d.Low))) * scale;
+    const openY = yMin - (payload.Open - Math.min(...chartData.map(d => d.Low))) * scale;
+    const closeY = yMin - (payload.Close - Math.min(...chartData.map(d => d.Low))) * scale;
     
     const bodyTop = Math.min(openY, closeY);
     const bodyHeight = Math.abs(openY - closeY) || 1;
@@ -438,7 +379,7 @@ const SyncedCandlestickChart = ({ data, interval, zoomLevel }) => {
 
   return (
     <ResponsiveContainer width="100%" height={400}>
-      <ComposedChart data={visibleData}>
+      <ComposedChart data={chartData}>
         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
         <XAxis dataKey="time" stroke="#9ca3af" angle={-45} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
         <YAxis stroke="#9ca3af" domain={['auto', 'auto']} />
