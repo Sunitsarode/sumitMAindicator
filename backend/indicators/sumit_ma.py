@@ -181,3 +181,42 @@ if __name__ == "__main__":
         print(f"Strength: {strength}")
         print(f"Description: {description}")
         print(f"{'='*60}")
+
+
+def calculate_sumit_ma_cross(data_1m, data_5m, data_1h, sma9_period=9, sma21_period=21):
+    """
+    Calculate cross-timeframe Sumit MA average score with SMA crossover
+    
+    Args:
+        data_1m: DataFrame with sumit_ma_score for 1min
+        data_5m: DataFrame with sumit_ma_score for 5min
+        data_1h: DataFrame with sumit_ma_score for 1hr
+        sma9_period: Fast SMA period (default 9)
+        sma21_period: Slow SMA period (default 21)
+    
+    Returns:
+        DataFrame with cross_avg_score, cross_sma9, cross_sma21
+    """
+    import pandas as pd
+    
+    # Align all timeframes by timestamp
+    df_1m = data_1m[['sumit_ma_score']].rename(columns={'sumit_ma_score': 'score_1m'})
+    df_5m = data_5m[['sumit_ma_score']].rename(columns={'sumit_ma_score': 'score_5m'})
+    df_1h = data_1h[['sumit_ma_score']].rename(columns={'sumit_ma_score': 'score_1h'})
+    
+    # Merge on index (timestamp)
+    combined = df_1m.join(df_5m, how='outer').join(df_1h, how='outer')
+    combined = combined.ffill()  # Forward fill missing values
+    
+    # Calculate average of all 3 timeframes
+    combined['cross_avg_score'] = (
+        combined['score_1m'] + 
+        combined['score_5m'] + 
+        combined['score_1h']
+    ) / 3
+    
+    # Calculate SMA9 and SMA21 of the average
+    combined['cross_sma9'] = combined['cross_avg_score'].rolling(window=sma9_period).mean()
+    combined['cross_sma21'] = combined['cross_avg_score'].rolling(window=sma21_period).mean()
+    
+    return combined[['cross_avg_score', 'cross_sma9', 'cross_sma21']]

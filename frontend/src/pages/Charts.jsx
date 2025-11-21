@@ -220,6 +220,14 @@ const Charts = ({ symbol }) => {
           formatDateTime={formatDateTime}
         />
       </ChartContainer>
+
+     <ChartContainer title="Chart 7: Cross-Timeframe Sumit MA with SMA9/SMA21 Crossover">
+        <CrossTimeframeChart 
+          data={symbolData} 
+          formatDateTime={formatDateTime}
+        />
+      </ChartContainer>
+
     </div>
   );
 };
@@ -405,6 +413,125 @@ const CandlestickChart = ({ data, interval, formatDateTime }) => {
         <Bar dataKey="High" shape={<CustomCandlestick />} />
       </ComposedChart>
     </ResponsiveContainer>
+  );
+};
+
+
+const CrossTimeframeChart = ({ data, formatDateTime }) => {
+  const [brushRange, setBrushRange] = useState({ startIndex: 0, endIndex: undefined });
+  
+  // Use 1m data as it has the cross scores
+  const chartData = data['1m']?.map((candle, idx) => {
+    const timestamp = candle.Datetime || candle.Date || candle.index;
+    const date = new Date(timestamp);
+    
+    const cleanedData = {
+      time: formatDateTime(timestamp, data['1m'], idx),
+      timestamp: date.getTime(),
+      index: idx,
+    };
+    
+    // Cross-timeframe scores
+    if (candle.cross_avg_score !== null && candle.cross_avg_score !== undefined) {
+      cleanedData.cross_avg = parseFloat(candle.cross_avg_score);
+    }
+    if (candle.cross_sma9 !== null && candle.cross_sma9 !== undefined) {
+      cleanedData.cross_sma9 = parseFloat(candle.cross_sma9);
+    }
+    if (candle.cross_sma21 !== null && candle.cross_sma21 !== undefined) {
+      cleanedData.cross_sma21 = parseFloat(candle.cross_sma21);
+    }
+    
+    return cleanedData;
+  }).filter(item => item.cross_avg !== undefined) || [];
+
+  const startIdx = brushRange.startIndex || 0;
+  const endIdx = brushRange.endIndex || chartData.length;
+  const visibleData = chartData.slice(startIdx, endIdx);
+
+  return (
+    <div>
+      <div className="mb-3 p-3 bg-gray-750 rounded text-sm">
+        <span className="font-semibold text-purple-400">Cross Avg:</span> Average of 1m, 5m, 1h | 
+        <span className="font-semibold text-green-400 ml-2">SMA9:</span> Fast | 
+        <span className="font-semibold text-orange-400 ml-2">SMA21:</span> Slow | 
+        <span className="text-yellow-400 ml-2">📈 SMA9 &gt; SMA21 = LONG | 📉 SMA9 &lt; SMA21 = SHORT</span>
+      </div>
+      
+      <ResponsiveContainer width="100%" height={400}>
+        <LineChart data={visibleData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis 
+            dataKey="time" 
+            stroke="#9ca3af"
+            angle={-45}
+            textAnchor="end"
+            height={80}
+            tick={{ fontSize: 11 }}
+          />
+          <YAxis domain={[0, 100]} stroke="#9ca3af" />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: '#1f2937', 
+              border: '1px solid #374151' 
+            }}
+            labelFormatter={(value) => `Time: ${value}`}
+            formatter={(value) => value.toFixed(2)}
+          />
+          <Legend />
+          
+          <Brush 
+            dataKey="time" 
+            height={30} 
+            stroke="#3b82f6"
+            fill="#1f2937"
+            data={chartData}
+            startIndex={startIdx}
+            endIndex={endIdx}
+            onChange={(range) => {
+              if (range && range.startIndex !== undefined && range.endIndex !== undefined) {
+                setBrushRange({ 
+                  startIndex: range.startIndex, 
+                  endIndex: range.endIndex 
+                });
+              }
+            }}
+          />
+          
+          <ReferenceLine y={70} stroke="#10b981" strokeDasharray="3 3" label="Long" />
+          <ReferenceLine y={50} stroke="#6b7280" strokeDasharray="3 3" label="Neutral" />
+          <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="3 3" label="Short" />
+          
+          <Line 
+            type="monotone" 
+            dataKey="cross_avg" 
+            stroke="#9b59b6" 
+            name="Cross Avg (1m+5m+1h)" 
+            dot={false} 
+            strokeWidth={2}
+            connectNulls={true}
+          />
+          <Line 
+            type="monotone" 
+            dataKey="cross_sma9" 
+            stroke="#10b981" 
+            name="SMA9 (Fast)" 
+            dot={false} 
+            strokeWidth={2}
+            connectNulls={true}
+          />
+          <Line 
+            type="monotone" 
+            dataKey="cross_sma21" 
+            stroke="#f59e0b" 
+            name="SMA21 (Slow)" 
+            dot={false} 
+            strokeWidth={2}
+            connectNulls={true}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   );
 };
 
