@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Dashboard from './pages/Dashboard';
 import LiveAnalysis from './pages/LiveAnalysis';
 import Charts from './pages/Charts';
+import Notifications from './pages/Notifications';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -29,9 +30,7 @@ const App = () => {
               <button
                 onClick={() => setCurrentPage('dashboard')}
                 className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'dashboard'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
               >
                 📊 Dashboard
@@ -39,9 +38,7 @@ const App = () => {
               <button
                 onClick={() => setCurrentPage('live')}
                 className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'live'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  currentPage === 'live' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
               >
                 🔴 Live Analysis
@@ -49,13 +46,19 @@ const App = () => {
               <button
                 onClick={() => setCurrentPage('charts')}
                 className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'charts'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  currentPage === 'charts' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
                 disabled={!selectedSymbol}
               >
                 📈 Charts {selectedSymbol && `(${selectedSymbol})`}
+              </button>
+              <button
+                onClick={() => setCurrentPage('notifications')}
+                className={`px-4 py-2 rounded-lg transition font-semibold ${
+                  currentPage === 'notifications' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                🔔 Trades
               </button>
             </div>
           </div>
@@ -65,17 +68,11 @@ const App = () => {
       {/* Page Content */}
       <main className="p-6">
         {currentPage === 'dashboard' && (
-          <Dashboard 
-            onSymbolClick={handleSymbolSelect}
-            onLiveClick={handleLiveAnalysisSelect}
-          />
+          <Dashboard onSymbolClick={handleSymbolSelect} onLiveClick={handleLiveAnalysisSelect} />
         )}
-        {currentPage === 'live' && (
-          <LiveAnalysis symbol={selectedSymbol} />
-        )}
-        {currentPage === 'charts' && (
-          <Charts symbol={selectedSymbol} />
-        )}
+        {currentPage === 'live' && <LiveAnalysis symbol={selectedSymbol} />}
+        {currentPage === 'charts' && <Charts symbol={selectedSymbol} />}
+        {currentPage === 'notifications' && <Notifications symbol={selectedSymbol} />}
       </main>
     </div>
   );
