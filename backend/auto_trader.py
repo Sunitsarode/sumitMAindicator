@@ -1,19 +1,17 @@
 """
-AUTO TRADER - Runs 24/7 on server without browser
-Supports multiple open positions with Sumit MA Cross signals
+AUTO TRADER - Runs 24/7 with Entry/Exit Criteria logging
 """
 import json
 import os
 from datetime import datetime
 from utils.cache import get_cache
 
-# Config
 TRADING_CONFIG = {
-    'MAX_OPEN_POSITIONS': 1,
-    'INITIAL_SL_POINTS': 50,
+    'MAX_OPEN_POSITIONS': 3,
+    'INITIAL_SL_POINTS': 20,
     'TRAILING_SL_POINTS': 15,
-    'PROFIT_TARGET': 100,
-    'MIN_SIGNAL_GAP_SECONDS': 300,
+    'PROFIT_TARGET': 50,
+    'MIN_SIGNAL_GAP_SECONDS': 60,
 }
 
 TRADES_DIR = 'trade_data'
@@ -48,6 +46,23 @@ def save_data(symbol, data):
     with open(filepath, 'w') as f:
         json.dump(data, f, indent=2)
 
+def get_indicator_values(candle):
+    """Extract all indicator values from candle for logging"""
+    return {
+        'rsi': float(candle.get('rsi_score', 50) or 50),
+        'macd': float(candle.get('macd_score', 50) or 50),
+        'adx': float(candle.get('adx_score', 50) or 50),
+        'supertrend': float(candle.get('supertrend_score', 50) or 50),
+        'sumit_ma': float(candle.get('sumit_ma_score', 50) or 50),
+        'sumit_short': float(candle.get('sumit_ratio1_score', 50) or 50),
+        'sumit_mid': float(candle.get('sumit_ratio2_score', 50) or 50),
+        'sumit_long': float(candle.get('sumit_ratio3_score', 50) or 50),
+        'cross_avg': float(candle.get('cross_avg_score', 0) or 0),
+        'cross_sma9': float(candle.get('cross_sma9', 0) or 0),
+        'cross_sma21': float(candle.get('cross_sma21', 0) or 0),
+        'price': float(candle.get('Close', 0) or 0),
+    }
+
 def get_signal_strength(candle):
     """Calculate signal from indicator scores"""
     scores = [
@@ -70,65 +85,30 @@ def get_signal_strength(candle):
     return {'strength': 'NEUTRAL', 'score': avg, 'direction': None}
 
 def get_sumit_ma_cross_signal(current_candle, prev_candle):
-    """
-    Sumit MA Cross Signal Logic:
-    
-    SHORT: SMA9 crosses SMA21 downward AND crossing_point > cross_avg AND crossing_point > 60
-    LONG:  SMA9 crosses SMA21 upward AND crossing_point < cross_avg AND crossing_point < 30
-    
-    Returns: {'direction': 'LONG'/'SHORT'/None, 'strength': str, 'cross_point': float}
-    """
-    # Get current values
+    """Sumit MA Cross Signal Logic"""
     curr_sma9 = float(current_candle.get('cross_sma9', 0) or 0)
     curr_sma21 = float(current_candle.get('cross_sma21', 0) or 0)
     curr_avg = float(current_candle.get('cross_avg_score', 50) or 50)
-    
-    # Get previous values
     prev_sma9 = float(prev_candle.get('cross_sma9', 0) or 0)
     prev_sma21 = float(prev_candle.get('cross_sma21', 0) or 0)
     
-    # Skip if no valid data
     if curr_sma9 == 0 or curr_sma21 == 0 or prev_sma9 == 0 or prev_sma21 == 0:
         return {'direction': None, 'strength': 'NO DATA', 'cross_point': 0}
     
-    # Calculate crossing point (average of SMA9 at cross)
     cross_point = curr_sma9
-    
-    # Detect crossover
-    # Downward cross: prev SMA9 >= prev SMA21 AND curr SMA9 < curr SMA21
     downward_cross = (prev_sma9 >= prev_sma21) and (curr_sma9 < curr_sma21)
-    
-    # Upward cross: prev SMA9 <= prev SMA21 AND curr SMA9 > curr SMA21
     upward_cross = (prev_sma9 <= prev_sma21) and (curr_sma9 > curr_sma21)
     
-    # SHORT Signal: Downward cross + cross_point > cross_avg + cross_point > 60
     if downward_cross and cross_point > curr_avg and cross_point > 60:
-        return {
-            'direction': 'SHORT',
-            'strength': 'CROSS SHORT',
-            'cross_point': cross_point,
-            'cross_avg': curr_avg,
-            'sma9': curr_sma9,
-            'sma21': curr_sma21
-        }
+        return {'direction': 'SHORT', 'strength': 'CROSS SHORT', 'cross_point': cross_point, 'cross_avg': curr_avg, 'sma9': curr_sma9, 'sma21': curr_sma21}
     
-    # LONG Signal: Upward cross + cross_point < cross_avg + cross_point < 30
     if upward_cross and cross_point < curr_avg and cross_point < 30:
-        return {
-            'direction': 'LONG',
-            'strength': 'CROSS LONG',
-            'cross_point': cross_point,
-            'cross_avg': curr_avg,
-            'sma9': curr_sma9,
-            'sma21': curr_sma21
-        }
+        return {'direction': 'LONG', 'strength': 'CROSS LONG', 'cross_point': cross_point, 'cross_avg': curr_avg, 'sma9': curr_sma9, 'sma21': curr_sma21}
     
     return {'direction': None, 'strength': 'NO CROSS', 'cross_point': cross_point}
 
 def can_open_new_position(data, direction, timestamp):
-    """Check if we can open a new position"""
     open_positions = data.get('openPositions', [])
-    
     if len(open_positions) >= TRADING_CONFIG['MAX_OPEN_POSITIONS']:
         return False, "Max positions reached"
     
@@ -136,35 +116,35 @@ def can_open_new_position(data, direction, timestamp):
     for pos in open_positions:
         if pos['direction'] == direction:
             return False, "Same direction position exists"
-        
         entry_time = datetime.fromisoformat(pos['entryTime'].replace('Z', '+00:00')) if 'Z' in pos['entryTime'] else datetime.fromisoformat(pos['entryTime'])
-        gap = (now - entry_time).total_seconds()
-        if gap < TRADING_CONFIG['MIN_SIGNAL_GAP_SECONDS']:
+        if (now - entry_time).total_seconds() < TRADING_CONFIG['MIN_SIGNAL_GAP_SECONDS']:
             return False, "Too soon after last entry"
-    
     return True, "OK"
 
-def open_trade(data, signal, price, timestamp, signal_type='INDICATOR'):
-    """Open new trade"""
+def open_trade(data, signal, price, timestamp, signal_type, candle_dict):
+    """Open new trade with entry criteria"""
     can_open, reason = can_open_new_position(data, signal['direction'], timestamp)
     if not can_open:
         return False
     
     sl = price - TRADING_CONFIG['INITIAL_SL_POINTS'] if signal['direction'] == 'LONG' else price + TRADING_CONFIG['INITIAL_SL_POINTS']
     
+    # Capture entry criteria (indicator values at entry)
+    entry_criteria = get_indicator_values(candle_dict)
+    
     new_position = {
         'id': int(datetime.now().timestamp() * 1000),
         'direction': signal['direction'],
         'strength': signal['strength'],
         'score': signal.get('score', signal.get('cross_point', 0)),
-        'signalType': signal_type,  # 'INDICATOR' or 'CROSS'
+        'signalType': signal_type,
         'entryPrice': price,
         'entryTime': timestamp,
         'stopLoss': sl,
-        'highestPL': 0
+        'highestPL': 0,
+        'entryCriteria': entry_criteria,  # Store entry indicators
     }
     
-    # Add cross details if available
     if 'cross_point' in signal:
         new_position['crossPoint'] = signal['cross_point']
         new_position['crossAvg'] = signal.get('cross_avg', 0)
@@ -172,14 +152,15 @@ def open_trade(data, signal, price, timestamp, signal_type='INDICATOR'):
     data['openPositions'].append(new_position)
     open_count = len(data['openPositions'])
     
-    print(f"📈 OPENED {signal['direction']} [{signal_type}] #{open_count}/{TRADING_CONFIG['MAX_OPEN_POSITIONS']} @ {price:.2f} | SL: {sl:.2f} | {signal['strength']}")
-    if 'cross_point' in signal:
-        print(f"   Cross Point: {signal['cross_point']:.2f} | Cross Avg: {signal.get('cross_avg', 0):.2f}")
+    print(f"📈 OPENED {signal['direction']} [{signal_type}] #{open_count}/{TRADING_CONFIG['MAX_OPEN_POSITIONS']} @ {price:.2f} | SL: {sl:.2f}")
+    print(f"   Entry: RSI={entry_criteria['rsi']:.0f} MACD={entry_criteria['macd']:.0f} ADX={entry_criteria['adx']:.0f} ST={entry_criteria['supertrend']:.0f} SMA={entry_criteria['sumit_ma']:.0f}")
+    if entry_criteria['cross_sma9'] > 0:
+        print(f"   Cross: Avg={entry_criteria['cross_avg']:.1f} SMA9={entry_criteria['cross_sma9']:.1f} SMA21={entry_criteria['cross_sma21']:.1f}")
     
     return True
 
-def close_trade(data, position_id, exit_price, timestamp, reason):
-    """Close specific trade by ID"""
+def close_trade(data, position_id, exit_price, timestamp, reason, candle_dict):
+    """Close trade with exit criteria"""
     open_positions = data.get('openPositions', [])
     pos = None
     pos_idx = None
@@ -195,6 +176,9 @@ def close_trade(data, position_id, exit_price, timestamp, reason):
     
     pl = exit_price - pos['entryPrice'] if pos['direction'] == 'LONG' else pos['entryPrice'] - exit_price
     
+    # Capture exit criteria (indicator values at exit)
+    exit_criteria = get_indicator_values(candle_dict)
+    
     trade = {
         'id': pos['id'],
         'timestamp': timestamp,
@@ -206,7 +190,9 @@ def close_trade(data, position_id, exit_price, timestamp, reason):
         'entryPrice': pos['entryPrice'],
         'exitPrice': exit_price,
         'pl': pl,
-        'reason': reason
+        'reason': reason,
+        'entryCriteria': pos.get('entryCriteria', {}),  # Entry indicators
+        'exitCriteria': exit_criteria,  # Exit indicators
     }
     
     data['trades'].insert(0, trade)
@@ -215,7 +201,10 @@ def close_trade(data, position_id, exit_price, timestamp, reason):
     
     emoji = "✅" if pl > 0 else "❌"
     remaining = len(data['openPositions'])
-    print(f"{emoji} CLOSED {pos['direction']} @ {exit_price:.2f} | P/L: {pl:+.2f} | Reason: {reason} | Open: {remaining} | Total P/L: {data['totalPL']:.2f}")
+    print(f"{emoji} CLOSED {pos['direction']} @ {exit_price:.2f} | P/L: {pl:+.2f} | Reason: {reason} | Open: {remaining}")
+    print(f"   Exit: RSI={exit_criteria['rsi']:.0f} MACD={exit_criteria['macd']:.0f} ADX={exit_criteria['adx']:.0f} ST={exit_criteria['supertrend']:.0f} SMA={exit_criteria['sumit_ma']:.0f}")
+    print(f"   Total P/L: {data['totalPL']:.2f}")
+    
     return True
 
 def process_symbol(symbol):
@@ -224,75 +213,62 @@ def process_symbol(symbol):
     if cache is None or len(cache) < 2:
         return
     
-    # Get latest and previous candle
     latest = cache.iloc[-1]
     prev = cache.iloc[-2]
     price = float(latest['Close'])
     timestamp = datetime.now().isoformat()
     
-    # Load saved data
+    # Convert to dict for easier access
+    latest_dict = latest.to_dict()
+    prev_dict = prev.to_dict()
+    
     data = load_data(symbol)
     
-    # Get both signal types
-    indicator_signal = get_signal_strength(latest.to_dict())
-    cross_signal = get_sumit_ma_cross_signal(latest.to_dict(), prev.to_dict())
+    indicator_signal = get_signal_strength(latest_dict)
+    cross_signal = get_sumit_ma_cross_signal(latest_dict, prev_dict)
     
     open_positions = data.get('openPositions', [])
-    
-    # Process each open position
     positions_to_close = []
     
     for pos in open_positions:
         pl = price - pos['entryPrice'] if pos['direction'] == 'LONG' else pos['entryPrice'] - price
         
-        # Update trailing SL
         if pl > 0:
             new_sl = price - TRADING_CONFIG['TRAILING_SL_POINTS'] if pos['direction'] == 'LONG' else price + TRADING_CONFIG['TRAILING_SL_POINTS']
-            if (pos['direction'] == 'LONG' and new_sl > pos['stopLoss']) or \
-               (pos['direction'] == 'SHORT' and new_sl < pos['stopLoss']):
+            if (pos['direction'] == 'LONG' and new_sl > pos['stopLoss']) or (pos['direction'] == 'SHORT' and new_sl < pos['stopLoss']):
                 pos['stopLoss'] = new_sl
                 pos['highestPL'] = max(pl, pos.get('highestPL', 0))
         
-        # Check SL
         hit_sl = price <= pos['stopLoss'] if pos['direction'] == 'LONG' else price >= pos['stopLoss']
         if hit_sl:
             positions_to_close.append((pos['id'], 'SL'))
             continue
         
-        # Check profit target
         if pl >= TRADING_CONFIG['PROFIT_TARGET']:
             positions_to_close.append((pos['id'], 'PROFIT'))
             continue
         
-        # Check reversal from CROSS signal (stronger)
         if cross_signal['direction']:
-            if (pos['direction'] == 'LONG' and cross_signal['direction'] == 'SHORT') or \
-               (pos['direction'] == 'SHORT' and cross_signal['direction'] == 'LONG'):
+            if (pos['direction'] == 'LONG' and cross_signal['direction'] == 'SHORT') or (pos['direction'] == 'SHORT' and cross_signal['direction'] == 'LONG'):
                 positions_to_close.append((pos['id'], 'CROSS_REVERSAL'))
                 continue
         
-        # Check reversal from indicator (only STRONG)
         if indicator_signal['direction'] and 'STRONG' in indicator_signal['strength']:
-            if (pos['direction'] == 'LONG' and indicator_signal['direction'] == 'SHORT') or \
-               (pos['direction'] == 'SHORT' and indicator_signal['direction'] == 'LONG'):
+            if (pos['direction'] == 'LONG' and indicator_signal['direction'] == 'SHORT') or (pos['direction'] == 'SHORT' and indicator_signal['direction'] == 'LONG'):
                 positions_to_close.append((pos['id'], 'REVERSAL'))
     
-    # Close marked positions
     for pos_id, reason in positions_to_close:
-        close_trade(data, pos_id, price, timestamp, reason)
+        close_trade(data, pos_id, price, timestamp, reason, latest_dict)
     
-    # Check for new entry - CROSS signal has priority
     if cross_signal['direction']:
-        open_trade(data, cross_signal, price, timestamp, 'CROSS')
-    # Then check indicator signal
+        open_trade(data, cross_signal, price, timestamp, 'CROSS', latest_dict)
     elif indicator_signal['direction'] and ('STRONG' in indicator_signal['strength'] or indicator_signal['score'] >= 65 or indicator_signal['score'] <= 35):
-        open_trade(data, indicator_signal, price, timestamp, 'INDICATOR')
+        open_trade(data, indicator_signal, price, timestamp, 'INDICATOR', latest_dict)
     
-    # Save updates
     save_data(symbol, data)
 
 def run_auto_trader():
-    """Called by scheduler - processes all symbols"""
+    """Called by scheduler"""
     with open('config.json', 'r') as f:
         config = json.load(f)
     
@@ -307,12 +283,9 @@ def run_auto_trader():
             traceback.print_exc()
 
 def get_status():
-    """Get current status of all positions"""
     with open('config.json', 'r') as f:
         config = json.load(f)
-    
     status = {'config': TRADING_CONFIG, 'symbols': {}}
-    
     for symbol in config['symbols']:
         data = load_data(symbol)
         status['symbols'][symbol] = {
@@ -321,7 +294,6 @@ def get_status():
             'totalPL': data.get('totalPL', 0),
             'positions': data.get('openPositions', [])
         }
-    
     return status
 
 if __name__ == '__main__':
