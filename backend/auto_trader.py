@@ -9,11 +9,11 @@ from utils.cache import get_cache
 
 # Config
 TRADING_CONFIG = {
-    'MAX_OPEN_POSITIONS': 3,
-    'INITIAL_SL_POINTS': 20,
+    'MAX_OPEN_POSITIONS': 1,
+    'INITIAL_SL_POINTS': 50,
     'TRAILING_SL_POINTS': 15,
-    'PROFIT_TARGET': 50,
-    'MIN_SIGNAL_GAP_SECONDS': 60,
+    'PROFIT_TARGET': 100,
+    'MIN_SIGNAL_GAP_SECONDS': 300,
 }
 
 TRADES_DIR = 'trade_data'
