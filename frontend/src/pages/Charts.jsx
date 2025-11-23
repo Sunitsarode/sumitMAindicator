@@ -69,17 +69,23 @@ const Charts = ({ symbol }) => {
           lines={[{ key: 'weighted_avg_score', name: 'Weighted Avg', color: '#8884d8' }, { key: 'weighted_sma9', name: 'SMA9', color: '#82ca9d' }, { key: 'weighted_sma21', name: 'SMA21', color: '#ffc658' }]} />
       </ChartContainer>
 
-      <ChartContainer title="Chart 3: Sumit MA - Price Position Strength">
+      <ChartContainer title="Chart 3: Sumit MA - Multi-Timeframe Scores">
         <div className="mb-4 p-4 bg-gray-750 rounded-lg">
           <div className="grid grid-cols-4 gap-3 text-sm">
-            <div><span className="font-semibold text-blue-400">Blue:</span> Short (8 MAs)</div>
-            <div><span className="font-semibold text-green-400">Green:</span> Mid (6 MAs)</div>
-            <div><span className="font-semibold text-orange-400">Orange:</span> Long (6 MAs)</div>
-            <div><span className="font-semibold text-purple-400">Purple:</span> Overall (20 MAs)</div>
+            <div><span className="font-semibold text-blue-400">Blue (1m):</span> 1-minute Sumit MA score</div>
+            <div><span className="font-semibold text-green-400">Green (5m):</span> 5-minute Sumit MA score</div>
+            <div><span className="font-semibold text-orange-400">Orange (1h):</span> 1-hour Sumit MA score</div>
+            <div><span className="font-semibold text-purple-400">Purple (Cross):</span> Average of all 3 timeframes</div>
+          </div>
+          <div className="mt-3 pt-3 border-t border-gray-700">
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="text-green-400">📈 LONG: Score &gt; 70</div>
+              <div className="text-yellow-400">➡️ NEUTRAL: Score 40-60</div>
+              <div className="text-red-400">📉 SHORT: Score &lt; 30</div>
+            </div>
           </div>
         </div>
-        <ImprovedChart data={symbolData} interval={selectedInterval} formatDateTime={formatDateTime}
-          lines={[{ key: 'sumit_ratio1_score', name: 'Short-term', color: '#3b82f6' }, { key: 'sumit_ratio2_score', name: 'Mid-term', color: '#10b981' }, { key: 'sumit_ratio3_score', name: 'Long-term', color: '#f59e0b' }, { key: 'sumit_ma_score', name: 'Overall', color: '#9b59b6' }]} showTradingZones={true} />
+        <MultiTimeframeSumitChart data={symbolData} formatDateTime={formatDateTime} showTradingZones={true} />
       </ChartContainer>
 
       <ChartContainer title="Chart 4: Price Chart (OHLC)">
@@ -125,13 +131,111 @@ const ImprovedChart = ({ data, interval, lines, showTradingZones = false, format
   );
 };
 
+const MultiTimeframeSumitChart = ({ data, formatDateTime, showTradingZones = false }) => {
+  const [brushRange, setBrushRange] = useState({ startIndex: 0, endIndex: undefined });
+  
+  // Get 1m data as base (has most frequent updates)
+  const chartData = data['1m']?.map((candle, idx) => {
+    const timestamp = candle.Datetime || candle.Date || candle.index;
+    const date = new Date(timestamp);
+    const cleanedData = {
+      time: formatDateTime(timestamp, data['1m'], idx),
+      timestamp: date.getTime(),
+      index: idx,
+    };
+    
+    // 1m sumit_ma_score
+    if (candle.sumit_ma_score != null && !isNaN(candle.sumit_ma_score)) {
+      cleanedData.sumit_1m = parseFloat(candle.sumit_ma_score);
+    }
+    
+    // cross_avg_score (average of 1m+5m+1h)
+    if (candle.cross_avg_score != null && !isNaN(candle.cross_avg_score)) {
+      cleanedData.cross_avg = parseFloat(candle.cross_avg_score);
+    }
+    
+    return cleanedData;
+  }).filter(item => item.sumit_1m !== undefined || item.cross_avg !== undefined) || [];
+  
+  // Merge 5m and 1h data by finding closest timestamps
+  if (data['5m'] && data['5m'].length > 0) {
+    data['5m'].forEach(candle5m => {
+      const ts5m = new Date(candle5m.Datetime || candle5m.Date).getTime();
+      // Find closest 1m candle
+      const closest = chartData.reduce((prev, curr) => 
+        Math.abs(curr.timestamp - ts5m) < Math.abs(prev.timestamp - ts5m) ? curr : prev
+      );
+      if (candle5m.sumit_ma_score != null && !isNaN(candle5m.sumit_ma_score)) {
+        closest.sumit_5m = parseFloat(candle5m.sumit_ma_score);
+      }
+    });
+  }
+  
+  if (data['1h'] && data['1h'].length > 0) {
+    data['1h'].forEach(candle1h => {
+      const ts1h = new Date(candle1h.Datetime || candle1h.Date).getTime();
+      const closest = chartData.reduce((prev, curr) => 
+        Math.abs(curr.timestamp - ts1h) < Math.abs(prev.timestamp - ts1h) ? curr : prev
+      );
+      if (candle1h.sumit_ma_score != null && !isNaN(candle1h.sumit_ma_score)) {
+        closest.sumit_1h = parseFloat(candle1h.sumit_ma_score);
+      }
+    });
+  }
+  
+  // Forward fill missing values
+  let last5m = null, last1h = null;
+  chartData.forEach(item => {
+    if (item.sumit_5m !== undefined) last5m = item.sumit_5m;
+    else if (last5m !== null) item.sumit_5m = last5m;
+    
+    if (item.sumit_1h !== undefined) last1h = item.sumit_1h;
+    else if (last1h !== null) item.sumit_1h = last1h;
+  });
+
+  const startIdx = brushRange.startIndex || 0;
+  const endIdx = brushRange.endIndex || chartData.length;
+  const visibleData = chartData.slice(startIdx, endIdx);
+
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={visibleData}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <XAxis dataKey="time" stroke="#9ca3af" angle={-45} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+        <YAxis domain={[0, 100]} stroke="#9ca3af" />
+        <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} formatter={(v) => v?.toFixed(2) || 'N/A'} />
+        <Legend />
+        <Brush dataKey="time" height={30} stroke="#3b82f6" fill="#1f2937" data={chartData} startIndex={startIdx} endIndex={endIdx}
+          onChange={(r) => { if (r) setBrushRange({ startIndex: r.startIndex, endIndex: r.endIndex }); }} />
+        {showTradingZones && (
+          <>
+            <ReferenceArea y1={0} y2={30} fill="#ef4444" fillOpacity={0.1} />
+            <ReferenceArea y1={70} y2={100} fill="#10b981" fillOpacity={0.1} />
+          </>
+        )}
+        <ReferenceLine y={70} stroke="#10b981" strokeDasharray="3 3" />
+        <ReferenceLine y={50} stroke="#6b7280" strokeDasharray="3 3" />
+        <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="3 3" />
+        
+        <Line type="monotone" dataKey="sumit_1m" stroke="#3b82f6" name="1m Sumit MA" dot={false} strokeWidth={2} connectNulls={true} />
+        <Line type="monotone" dataKey="sumit_5m" stroke="#10b981" name="5m Sumit MA" dot={false} strokeWidth={2} connectNulls={true} />
+        <Line type="monotone" dataKey="sumit_1h" stroke="#f59e0b" name="1h Sumit MA" dot={false} strokeWidth={2} connectNulls={true} />
+        <Line type="monotone" dataKey="cross_avg" stroke="#9b59b6" name="Cross Avg (1m+5m+1h)" dot={false} strokeWidth={3} connectNulls={true} />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+};
+
 const CandlestickChart = ({ data, interval, formatDateTime }) => {
-  const chartData = data[interval]?.map((candle, idx) => ({
-    time: formatDateTime(candle.Datetime || candle.Date, data[interval], idx),
-    Open: parseFloat(candle.Open) || 0, Close: parseFloat(candle.Close) || 0,
-    High: parseFloat(candle.High) || 0, Low: parseFloat(candle.Low) || 0,
-    color: parseFloat(candle.Close) >= parseFloat(candle.Open) ? '#10b981' : '#ef4444'
-  })) || [];
+  const chartData = data[interval]?.map((candle, idx) => {
+    const timestamp = candle.Datetime || candle.Date || candle.index;
+    return {
+      time: formatDateTime(timestamp, data[interval], idx),
+      Open: parseFloat(candle.Open) || 0, Close: parseFloat(candle.Close) || 0,
+      High: parseFloat(candle.High) || 0, Low: parseFloat(candle.Low) || 0,
+      color: parseFloat(candle.Close) >= parseFloat(candle.Open) ? '#10b981' : '#ef4444'
+    };
+  }) || [];
 
   return (
     <ResponsiveContainer width="100%" height={400}>

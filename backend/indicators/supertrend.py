@@ -1,59 +1,153 @@
 import pandas as pd
 import numpy as np
+from ta.trend import SuperTrend
 
+# =============================================================
+# APPLY SUPERTREND WITH FLIP DETECTION
+# =============================================================
+def apply_supertrend(df, period, multiplier):
+    """
+    Apply Supertrend using ta library with flip detection
+    Returns modified dataframe with supertrend columns
+    """
+    st = SuperTrend(
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        window=period,
+        multiplier=multiplier
+    )
+    
+    df[f"st_{period}_{multiplier}"] = st.super_trend()
+    df[f"dir_{period}_{multiplier}"] = st.super_trend_direction()
+    df[f"long_{period}_{multiplier}"] = st.super_trend_long()
+    df[f"short_{period}_{multiplier}"] = st.super_trend_short()
+    
+    # Flip detection (direction change)
+    df[f"flip_{period}_{multiplier}"] = df[f"dir_{period}_{multiplier}"].diff().fillna(0)
+    
+    # Bullish flip: direction changes from -1 to 1 (diff = 2)
+    df[f"bullish_flip_{period}_{multiplier}"] = (df[f"flip_{period}_{multiplier}"] == 2).astype(int)
+    
+    # Bearish flip: direction changes from 1 to -1 (diff = -2)
+    df[f"bearish_flip_{period}_{multiplier}"] = (df[f"flip_{period}_{multiplier}"] == -2).astype(int)
+    
+    return df
+
+# =============================================================
+# SCORE A SINGLE SUPERTREND
+# =============================================================
+def score_single_supertrend(row, period, multiplier):
+    """
+    Score individual supertrend:
+    - Long trend: +1
+    - Short trend: -1
+    - Bullish flip: +1 bonus
+    - Bearish flip: -1 penalty
+    Range: -2 to +2
+    """
+    long_col = f"long_{period}_{multiplier}"
+    flip_col_b = f"bullish_flip_{period}_{multiplier}"
+    flip_col_s = f"bearish_flip_{period}_{multiplier}"
+    
+    score = 0
+    
+    # Trend score
+    if row[long_col]:
+        score += 1
+    else:
+        score -= 1
+    
+    # Flip bonus/penalty
+    if row[flip_col_b] == 1:
+        score += 1
+    if row[flip_col_s] == 1:
+        score -= 1
+    
+    return score
+
+# =============================================================
+# MULTI-TIMEFRAME (MTF) SUPERTREND SCORING
+# =============================================================
+def calculate_mtf_supertrend_score(
+    df_1m,
+    df_5m,
+    df_1h,
+    st_settings=[(7, 3), (10, 2)],
+    weights={"1m": 1, "5m": 2, "1h": 4}
+):
+    """
+    Calculate Multi-Timeframe Supertrend Score
+    
+    Args:
+        df_1m, df_5m, df_1h: DataFrames with OHLC data
+        st_settings: List of (period, multiplier) tuples
+        weights: Timeframe weights (higher = more important)
+    
+    Returns:
+        dict with raw_score, score_0_100
+    """
+    # Make copies
+    df_1m = df_1m.copy()
+    df_5m = df_5m.copy()
+    df_1h = df_1h.copy()
+    
+    # Apply each supertrend setting to all timeframes
+    for period, mult in st_settings:
+        df_1m = apply_supertrend(df_1m, period, mult)
+        df_5m = apply_supertrend(df_5m, period, mult)
+        df_1h = apply_supertrend(df_1h, period, mult)
+    
+    # Score each timeframe
+    def score_tf(df, tf_label):
+        total = 0
+        for period, mult in st_settings:
+            total += df.apply(lambda row: score_single_supertrend(row, period, mult), axis=1)
+        return total * weights[tf_label]
+    
+    df_1m["tf_score"] = score_tf(df_1m, "1m")
+    df_5m["tf_score"] = score_tf(df_5m, "5m")
+    df_1h["tf_score"] = score_tf(df_1h, "1h")
+    
+    # Combine MTF score
+    final_score = df_1m["tf_score"].iloc[-1] + df_5m["tf_score"].iloc[-1] + df_1h["tf_score"].iloc[-1]
+    
+    # Max possible score: (num_supertrends * 2 * weight) per timeframe
+    max_score = sum((2 * len(st_settings) * weights[tf]) for tf in ["1m", "5m", "1h"])
+    
+    # Normalize to 0-100
+    final_score_normalized = ((final_score + max_score) / (2 * max_score)) * 100
+    
+    return {
+        "raw_score": final_score,
+        "score_0_100": round(final_score_normalized, 2),
+    }
+
+# =============================================================
+# LEGACY SCORING (FOR COMPATIBILITY)
+# =============================================================
 def calculate_supertrend(df, period=10, multiplier=3):
-    """
-    Calculate Supertrend indicator manually
-    Returns DataFrame with 'supertrend' and 'direction' columns
-    """
-    high = df['High']
-    low = df['Low']
-    close = df['Close']
-    
-    # Calculate ATR (Average True Range)
-    tr1 = high - low
-    tr2 = abs(high - close.shift())
-    tr3 = abs(low - close.shift())
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = tr.rolling(window=period).mean()
-    
-    # Calculate basic upper and lower bands
-    hl_avg = (high + low) / 2
-    upper_band = hl_avg + (multiplier * atr)
-    lower_band = hl_avg - (multiplier * atr)
-    
-    # Initialize Supertrend
-    supertrend = pd.Series(index=df.index, dtype=float)
-    direction = pd.Series(index=df.index, dtype=int)
-    
-    for i in range(period, len(df)):
-        if i == period:
-            supertrend.iloc[i] = lower_band.iloc[i]
-            direction.iloc[i] = 1
-        else:
-            if close.iloc[i] > supertrend.iloc[i-1]:
-                supertrend.iloc[i] = lower_band.iloc[i]
-                direction.iloc[i] = 1
-            elif close.iloc[i] < supertrend.iloc[i-1]:
-                supertrend.iloc[i] = upper_band.iloc[i]
-                direction.iloc[i] = -1
-            else:
-                supertrend.iloc[i] = supertrend.iloc[i-1]
-                direction.iloc[i] = direction.iloc[i-1]
+    """Legacy function - returns supertrend and direction"""
+    st = SuperTrend(
+        high=df['High'],
+        low=df['Low'],
+        close=df['Close'],
+        window=period,
+        multiplier=multiplier
+    )
     
     result = pd.DataFrame(index=df.index)
-    result['supertrend'] = supertrend
-    result['direction'] = direction
+    result['supertrend'] = st.super_trend()
+    result['direction'] = st.super_trend_direction()
     
     return result
 
 def score_supertrend(st1_direction, st2_direction):
     """
-    Supertrend Score:
+    Legacy Supertrend Score:
     - Both uptrend = 100
     - Both downtrend = 0
     - Mixed = 50
-    - Adjustment: +15 for uptrend, -15 for downtrend
     """
     if pd.isna(st1_direction) or pd.isna(st2_direction):
         return 50.0
