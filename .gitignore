@@ -228,3 +228,4 @@ dist-ssr
 # Temporary files
 *.tmp
 *.temp
+backend/trade_data/

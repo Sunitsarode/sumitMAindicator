@@ -3,8 +3,9 @@ import numpy as np
 from indicators.rsi import calculate_rsi, score_rsi
 from indicators.macd import calculate_macd, score_macd
 from indicators.adx import calculate_adx, score_adx
-from indicators.supertrend import calculate_supertrend, score_supertrend
-from indicators.sumit_ma import calculate_sumit_ma
+from indicators.supertrend import calculate_mtf_supertrend_score
+from indicators.sumit_ma import calculate_sumit_ma, sumit_ma_signals
+from indicators.sumit_aroon import calculate_sumit_aroon, score_aroon
 
 def calculate_all_indicators(df, config, ath_atl_data=None):
     """Calculate all indicators and return scored DataFrame with error handling"""
@@ -14,6 +15,7 @@ def calculate_all_indicators(df, config, ath_atl_data=None):
         config['indicators']['rsi']['period'],
         config['indicators']['adx']['period'],
         config['indicators']['sumit_ma']['ma-4'],
+        config['indicators'].get('aroon', {}).get('period', 25),
         max([st['period'] for st in config['indicators']['supertrend']])
     )
     
@@ -25,6 +27,9 @@ def calculate_all_indicators(df, config, ath_atl_data=None):
     scores['adx_score'] = 50.0
     scores['supertrend_score'] = 50.0
     scores['sumit_ma_score'] = 50.0
+    scores['aroon_score'] = 50.0
+    scores['buy_signal_count'] = 0
+    scores['sell_signal_count'] = 0
     
     if len(df) < min_required:
         print(f"⚠ Warning: Only {len(df)} candles available, need {min_required} for full indicators")
@@ -56,26 +61,25 @@ def calculate_all_indicators(df, config, ath_atl_data=None):
     except Exception as e:
         print(f"ADX calculation error: {e}")
     
-    # Supertrend - needs period+ candles
+    # Aroon - needs 25+ candles (or configured period)
     try:
-        st1_config = config['indicators']['supertrend'][0]
-        st2_config = config['indicators']['supertrend'][1]
-        
-        max_st_period = max(st1_config['period'], st2_config['period'])
-        
-        if len(df) >= max_st_period:
-            st1 = calculate_supertrend(df, st1_config['period'], st1_config['multiplier'])
-            st2 = calculate_supertrend(df, st2_config['period'], st2_config['multiplier'])
+        aroon_period = config['indicators'].get('aroon', {}).get('period', 25)
+        if len(df) >= aroon_period:
+            aroon_data = calculate_sumit_aroon(df, aroon_period)
+            scores['aroon_up'] = aroon_data['aroon_up']
+            scores['aroon_down'] = aroon_data['aroon_down']
+            scores['aroon_score'] = aroon_data['aroon_score']
+            scores['aroon_oscillator'] = aroon_data['aroon_oscillator']
             
-            scores['supertrend_score'] = pd.Series(
-                [score_supertrend(
-                    st1['direction'].iloc[i] if i < len(st1) else np.nan, 
-                    st2['direction'].iloc[i] if i < len(st2) else np.nan
-                ) for i in range(len(df))],
-                index=df.index
-            )
+            valid_count = aroon_data['aroon_score'].notna().sum()
+            print(f"✓ Aroon: {valid_count} valid scores")
     except Exception as e:
-        print(f"Supertrend calculation error: {e}")
+        print(f"Aroon calculation error: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # Supertrend - now using NEW logic (handled separately in scheduler for MTF)
+    scores['supertrend_score'] = 50.0
     
     # Sumit MA - needs ma-4+ candles, returns DataFrame with multiple scores
     try:
@@ -86,7 +90,7 @@ def calculate_all_indicators(df, config, ath_atl_data=None):
                 config['indicators']['sumit_ma']['ma-2'],
                 config['indicators']['sumit_ma']['ma-3'],
                 config['indicators']['sumit_ma']['ma-4'],
-                ath_atl_data=ath_atl_data  # Pass ATH/ATL data
+                ath_atl_data=ath_atl_data
             )
             # Add all ratio scores to the main scores DataFrame
             scores['sumit_ratio1_score'] = sumit_result['sumit_ratio1_score']
@@ -94,13 +98,16 @@ def calculate_all_indicators(df, config, ath_atl_data=None):
             scores['sumit_ratio3_score'] = sumit_result['sumit_ratio3_score']
             scores['sumit_ma_score'] = sumit_result['sumit_ma_score']
             
+            # NEW: Add Sumit MA Signals (BUY/SELL counts)
+            signal_result = sumit_ma_signals(df)
+            scores['buy_signal_count'] = signal_result['buy_signal_count']
+            scores['sell_signal_count'] = signal_result['sell_signal_count']
+            
             valid_count = sumit_result['sumit_ma_score'].notna().sum()
-            if ath_atl_data:
-                print(f"✓ Sumit MA (ATH/ATL normalized): {valid_count} valid scores")
-            else:
-                print(f"✓ Sumit MA: {valid_count} valid scores")
+            print(f"✓ Sumit MA: {valid_count} valid scores")
+            print(f"✓ Sumit MA Signals: BUY/SELL counts calculated")
         else:
-            print(f"⚠ Sumit MA skipped: {len(df)} candles < 201 required")
+            print(f"⚠ Sumit MA skipped: {len(df)} candles < 301 required")
     except Exception as e:
         print(f"✗ Sumit MA calculation error: {e}")
         import traceback

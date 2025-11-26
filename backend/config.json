@@ -48,9 +48,12 @@
     ],
     "sumit_ma": {
       "ma-1": 3,
-      "ma-2": 21,
+      "ma-2": 9,
       "ma-3": 101,
       "ma-4": 201
+    },
+      "aroon": {
+      "period": 25
     },
     "smoothing": {
       "sma9": 9,

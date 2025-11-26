@@ -104,6 +104,95 @@ def calculate_sumit_ma(df, ma1=3, ma2=21, ma3=101, ma4=201, ath_atl_data=None):
     return result
 
 
+def sumit_ma_signals(df):
+    """
+    NEW SUMIT MA SIGNAL LOGIC
+    
+    Counts BUY and SELL signals based on price position relative to 18 MAs
+    (excludes MA 3 High and MA 3 Low)
+    
+    BUY Signal: Price > MA (counts 0-18)
+    SELL Signal: Price < MA (counts 0-18)
+    
+    Returns DataFrame with buy_signal_count, sell_signal_count
+    """
+    
+    # Calculate OHLC/4 (typical price)
+    ohlc4 = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
+    
+    # Define 18 MA periods for OHLC/4 (excluding MA 3 High/Low)
+    ma_periods = [3, 9, 15, 21, 27, 31, 37, 51, 65, 81, 101, 121, 131, 151, 171, 201, 251, 301]
+    
+    # Calculate all 18 MAs
+    mas = {}
+    for period in ma_periods:
+        mas[f'MA_{period}'] = SMAIndicator(close=ohlc4, window=period).sma_indicator()
+    
+    # Create result DataFrame
+    result = pd.DataFrame(index=df.index)
+    result['buy_signal_count'] = 0
+    result['sell_signal_count'] = 0
+    
+    # Find valid points (where longest MA exists - 301)
+    max_period = max(ma_periods)
+    valid_mask = pd.Series([True] * len(df), index=df.index)
+    for ma_series in mas.values():
+        valid_mask = valid_mask & ~ma_series.isna()
+    
+    valid_count = valid_mask.sum()
+    
+    if valid_count == 0:
+        print(f"⚠ Sumit MA Signals: No valid data points (need at least {max_period} candles)")
+        return result
+    
+    print(f"✓ Sumit MA Signals: Processing {valid_count} valid data points")
+    print(f"  Using 18 MAs (OHLC/4 based)")
+    
+    # Calculate signals for each valid point
+    for idx in df.index[valid_mask]:
+        current_price = df.loc[idx, 'Close']
+        
+        buy_count = 0
+        sell_count = 0
+        
+        for ma_name, ma_series in mas.items():
+            ma_value = ma_series[idx]
+            
+            if current_price > ma_value:
+                buy_count += 1
+            elif current_price < ma_value:
+                sell_count += 1
+            # If equal, don't count either way
+        
+        result.loc[idx, 'buy_signal_count'] = buy_count
+        result.loc[idx, 'sell_signal_count'] = sell_count
+    
+    # Debug output
+    if valid_count > 0:
+        last_idx = result.index[valid_mask][-1]
+        last_price = df.loc[last_idx, 'Close']
+        last_buy = result.loc[last_idx, 'buy_signal_count']
+        last_sell = result.loc[last_idx, 'sell_signal_count']
+        
+        print(f"  Last valid point:")
+        print(f"    Price: ${last_price:.2f}")
+        print(f"    BUY Signals: {last_buy}/18")
+        print(f"    SELL Signals: {last_sell}/18")
+        
+        if last_buy > 12:
+            print(f"    Signal: STRONG BUY (>{last_buy}/18 MAs below price)")
+        elif last_buy > 9:
+            print(f"    Signal: BUY ({last_buy}/18 MAs below price)")
+        elif last_sell > 12:
+            print(f"    Signal: STRONG SELL (>{last_sell}/18 MAs above price)")
+        elif last_sell > 9:
+            print(f"    Signal: SELL ({last_sell}/18 MAs above price)")
+        else:
+            print(f"    Signal: NEUTRAL")
+    
+    return result
+
+
 def interpret_sumit_score(score):
     """Interpret Sumit MA score for trading decisions"""
     if score >= 90:

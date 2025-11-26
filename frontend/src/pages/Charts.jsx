@@ -95,6 +95,9 @@ const Charts = ({ symbol }) => {
       <ChartContainer title="Chart 5: Cross-Timeframe Sumit MA with SMA Crossover">
         <CrossTimeframeChart data={symbolData} formatDateTime={formatDateTime} />
       </ChartContainer>
+      <ChartContainer title="Chart 6: Sumit MA Signals (BUY/SELL Count)">
+        <SumitMASignalsChart data={symbolData} interval={selectedInterval} formatDateTime={formatDateTime} />
+     </ChartContainer>
     </div>
   );
 };
@@ -289,6 +292,160 @@ const CrossTimeframeChart = ({ data, formatDateTime }) => {
         <Line type="monotone" dataKey="cross_sma21" stroke="#f59e0b" name="SMA21" dot={false} strokeWidth={2} connectNulls={true} />
       </LineChart>
     </ResponsiveContainer>
+  );
+};
+
+
+const SumitMASignalsChart = ({ data, interval, formatDateTime }) => {
+  const [brushRange, setBrushRange] = useState({ startIndex: 0, endIndex: undefined });
+  
+  const chartData = data[interval]?.map((candle, idx) => {
+    const timestamp = candle.Datetime || candle.Date || candle.index;
+    return {
+      time: formatDateTime(timestamp, data[interval], idx),
+      timestamp: new Date(timestamp).getTime(),
+      index: idx,
+      buySignals: parseInt(candle.buy_signal_count) || 0,
+      sellSignals: -(parseInt(candle.sell_signal_count) || 0),
+      price: parseFloat(candle.Close) || 0,
+    };
+  }).filter(item => item.buySignals !== undefined || item.sellSignals !== undefined) || [];
+
+  const startIdx = brushRange.startIndex || 0;
+  const endIdx = brushRange.endIndex || chartData.length;
+  const visibleData = chartData.slice(startIdx, endIdx);
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-gray-750 rounded-lg p-4">
+        <div className="grid grid-cols-3 gap-4 text-sm">
+          <div>
+            <span className="font-semibold text-green-400">🟢 BUY Signals (0-18):</span>
+            <p className="text-xs text-gray-400 mt-1">Count of MAs below price. Higher = stronger uptrend.</p>
+            <p className="text-xs text-green-300 mt-1">
+              • &gt;15 = Very Strong Buy<br/>
+              • 12-15 = Strong Buy<br/>
+              • 9-12 = Moderate Buy
+            </p>
+          </div>
+          <div>
+            <span className="font-semibold text-red-400">🔴 SELL Signals (0-18):</span>
+            <p className="text-xs text-gray-400 mt-1">Count of MAs above price. Higher = stronger downtrend.</p>
+            <p className="text-xs text-red-300 mt-1">
+              • &gt;15 = Very Strong Sell<br/>
+              • 12-15 = Strong Sell<br/>
+              • 9-12 = Moderate Sell
+            </p>
+          </div>
+          <div>
+            <span className="font-semibold text-blue-400">📊 Logic:</span>
+            <p className="text-xs text-gray-400 mt-1">Uses 18 OHLC/4 Moving Averages (MA 3 to MA 301)</p>
+            <p className="text-xs text-blue-300 mt-1">
+              Price position relative to each MA determines signal strength
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <ResponsiveContainer width="100%" height={400}>
+        <ComposedChart data={visibleData}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+          <XAxis 
+            dataKey="time" 
+            stroke="#9ca3af" 
+            angle={-45} 
+            textAnchor="end" 
+            height={80} 
+            tick={{ fontSize: 11 }} 
+          />
+          <YAxis 
+            yAxisId="left"
+            domain={[-18, 18]} 
+            stroke="#9ca3af"
+            label={{ value: 'Signal Count', angle: -90, position: 'insideLeft' }}
+          />
+          <Tooltip 
+            contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }}
+            formatter={(value, name) => {
+              if (name === 'BUY Signals') {
+                return [`${value}/18`, name];
+              }
+              if (name === 'SELL Signals') {
+                return [`${Math.abs(value)}/18`, name];
+              }
+              return [value, name];
+            }}
+          />
+          <Legend />
+          <Brush 
+            dataKey="time" 
+            height={30} 
+            stroke="#3b82f6" 
+            fill="#1f2937" 
+            data={chartData}
+            startIndex={startIdx}
+            endIndex={endIdx}
+            onChange={(r) => { 
+              if (r) setBrushRange({ startIndex: r.startIndex, endIndex: r.endIndex }); 
+            }}
+          />
+          
+          {/* Reference lines for signal strength zones */}
+          <ReferenceLine yAxisId="left" y={15} stroke="#10b981" strokeDasharray="3 3" label="Very Strong" />
+          <ReferenceLine yAxisId="left" y={12} stroke="#84cc16" strokeDasharray="3 3" label="Strong" />
+          <ReferenceLine yAxisId="left" y={9} stroke="#fbbf24" strokeDasharray="3 3" label="Moderate" />
+          
+          {/* BUY signals as green bars */}
+          <Bar 
+            yAxisId="left"
+            dataKey="buySignals" 
+            fill="#10b981" 
+            name="BUY Signals"
+            opacity={0.8}
+          />
+          
+          {/* SELL signals as red bars (negative values for visual distinction) */}
+          <Bar 
+            yAxisId="left"
+            dataKey="sellSignals" 
+            fill="#ef4444" 
+            name="SELL Signals"
+            opacity={0.8}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      {/* Latest Signal Summary */}
+      {visibleData.length > 0 && (
+        <div className="bg-gray-750 rounded-lg p-4">
+          <h4 className="font-semibold mb-3">Latest Signal Status</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-green-900/30 border border-green-600 rounded-lg p-3">
+              <div className="text-xs text-gray-400">BUY Signals</div>
+              <div className="text-2xl font-bold text-green-400">
+                {visibleData[visibleData.length - 1].buySignals}/18
+              </div>
+              <div className="text-xs text-green-300 mt-1">
+                {visibleData[visibleData.length - 1].buySignals >= 15 ? 'Very Strong Buy' :
+                 visibleData[visibleData.length - 1].buySignals >= 12 ? 'Strong Buy' :
+                 visibleData[visibleData.length - 1].buySignals >= 9 ? 'Moderate Buy' : 'Weak'}
+              </div>
+            </div>
+            <div className="bg-red-900/30 border border-red-600 rounded-lg p-3">
+              <div className="text-xs text-gray-400">SELL Signals</div>
+              <div className="text-2xl font-bold text-red-400">
+                {Math.abs(visibleData[visibleData.length - 1].sellSignals)}/18
+              </div>
+              <div className="text-xs text-red-300 mt-1">
+                {Math.abs(visibleData[visibleData.length - 1].sellSignals) >= 15 ? 'Very Strong Sell' :
+                 Math.abs(visibleData[visibleData.length - 1].sellSignals) >= 12 ? 'Strong Sell' :
+                 Math.abs(visibleData[visibleData.length - 1].sellSignals) >= 9 ? 'Moderate Sell' : 'Weak'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 
