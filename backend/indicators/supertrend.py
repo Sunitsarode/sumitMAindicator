@@ -29,24 +29,16 @@ def apply_supertrend(df, period, multiplier):
         df[f"bearish_flip_{period}_{multiplier}"] = 0
         return df
     
-    # pandas_ta returns columns with different formats, find the correct ones
-    available_cols = list(supertrend_df.columns)
-    
-    # Find columns that match our pattern
-    supert_col = None
-    supertd_col = None
-    supertl_col = None
-    superts_col = None
-    
-    for col in available_cols:
-        if f'SUPERT_{period}_{multiplier}' in col and 'SUPERTd' not in col and 'SUPERTl' not in col and 'SUPERTs' not in col:
-            supert_col = col
-        elif f'SUPERTd_{period}_{multiplier}' in col:
-            supertd_col = col
-        elif f'SUPERTl_{period}_{multiplier}' in col:
-            supertl_col = col
-        elif f'SUPERTs_{period}_{multiplier}' in col:
-            superts_col = col
+    # Find column names, handling variations like '.0' suffix
+    def find_col(prefix):
+        exact_match = f"{prefix}_{period}_{multiplier}"
+        if f"{exact_match}.0" in supertrend_df.columns:
+            return f"{exact_match}.0"
+        return exact_match if exact_match in supertrend_df.columns else None
+
+    supert_col, supertd_col, supertl_col, superts_col = (
+        find_col('SUPERT'), find_col('SUPERTd'), find_col('SUPERTl'), find_col('SUPERTs')
+    )
     
     # If columns not found, return empty columns
     if not all([supert_col, supertd_col, supertl_col, superts_col]):
@@ -124,68 +116,40 @@ def calculate_mtf_supertrend_score(
     bullish_flips = []
     bearish_flips = []
     
-    # Check 1m
-    for period, mult in st_settings:
-        direction = df_1m[f"dir_{period}_{mult}"].iloc[-1]
-        bullish_flip = df_1m[f"bullish_flip_{period}_{mult}"].iloc[-1]
-        bearish_flip = df_1m[f"bearish_flip_{period}_{mult}"].iloc[-1]
-        
-        points = 1 if direction == 1 else 0
-        total_points += points
-        
-        breakdown['1m'][f'ST_{period}_{mult}'] = {
-            'direction': 'bullish' if direction == 1 else 'bearish',
-            'points': points,
-            'bullish_flip': bool(bullish_flip),
-            'bearish_flip': bool(bearish_flip)
-        }
-        
-        if bullish_flip:
-            bullish_flips.append(f"1m_ST{period}_{mult}")
-        if bearish_flip:
-            bearish_flips.append(f"1m_ST{period}_{mult}")
-    
-    # Check 5m
-    for period, mult in st_settings:
-        direction = df_5m[f"dir_{period}_{mult}"].iloc[-1]
-        bullish_flip = df_5m[f"bullish_flip_{period}_{mult}"].iloc[-1]
-        bearish_flip = df_5m[f"bearish_flip_{period}_{mult}"].iloc[-1]
-        
-        points = 1 if direction == 1 else 0
-        total_points += points
-        
-        breakdown['5m'][f'ST_{period}_{mult}'] = {
-            'direction': 'bullish' if direction == 1 else 'bearish',
-            'points': points,
-            'bullish_flip': bool(bullish_flip),
-            'bearish_flip': bool(bearish_flip)
-        }
-        
-        if bullish_flip:
-            bullish_flips.append(f"5m_ST{period}_{mult}")
-        if bearish_flip:
-            bearish_flips.append(f"5m_ST{period}_{mult}")
-    
-    # Check 1h
-    for period, mult in st_settings:
-        direction = df_1h[f"dir_{period}_{mult}"].iloc[-1]
-        bullish_flip = df_1h[f"bullish_flip_{period}_{mult}"].iloc[-1]
-        bearish_flip = df_1h[f"bearish_flip_{period}_{mult}"].iloc[-1]
-        
-        points = 1 if direction == 1 else 0
-        total_points += points
-        
-        breakdown['1h'][f'ST_{period}_{mult}'] = {
-            'direction': 'bullish' if direction == 1 else 'bearish',
-            'points': points,
-            'bullish_flip': bool(bullish_flip),
-            'bearish_flip': bool(bearish_flip)
-        }
-        
-        if bullish_flip:
-            bullish_flips.append(f"1h_ST{period}_{mult}")
-        if bearish_flip:
-            bearish_flips.append(f"1h_ST{period}_{mult}")
+    def process_timeframe(df, tf_name):
+        nonlocal total_points
+        if df is None or df.empty:
+            return
+
+        for period, mult in st_settings:
+            dir_col = f"dir_{period}_{mult}"
+            bull_flip_col = f"bullish_flip_{period}_{mult}"
+            bear_flip_col = f"bearish_flip_{period}_{mult}"
+
+            if dir_col not in df.columns: continue
+
+            direction = df[dir_col].iloc[-1]
+            bullish_flip = df[bull_flip_col].iloc[-1]
+            bearish_flip = df[bear_flip_col].iloc[-1]
+
+            points = 1 if direction == 1 else 0
+            total_points += points
+
+            breakdown[tf_name][f'ST_{period}_{mult}'] = {
+                'direction': 'bullish' if direction == 1 else 'bearish',
+                'points': points,
+                'bullish_flip': bool(bullish_flip),
+                'bearish_flip': bool(bearish_flip)
+            }
+
+            if bullish_flip:
+                bullish_flips.append(f"{tf_name}_ST{period}_{mult}")
+            if bearish_flip:
+                bearish_flips.append(f"{tf_name}_ST{period}_{mult}")
+
+    process_timeframe(df_1m, '1m')
+    process_timeframe(df_5m, '5m')
+    process_timeframe(df_1h, '1h')
     
     # Normalize to 0-100
     max_points = 6

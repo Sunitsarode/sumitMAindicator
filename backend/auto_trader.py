@@ -94,19 +94,25 @@ def save_data(symbol, data):
     with open(filepath, 'w') as f:
         json.dump(data, f, indent=2)
 
+def _safe_int(value, default):
+    """Safely convert to int, handling None and NaN."""
+    if value is None or pd.isna(value):
+        return default
+    return int(value)
+
 def get_indicator_values(candle):
     """Extract all indicator values from candle"""
     return {
         'rsi': float(candle.get('rsi_score', 50) or 50),
         'macd': float(candle.get('macd_score', 50) or 50),
         'adx': float(candle.get('adx_score', 50) or 50),
-        'supertrend': float(candle.get('supertrend_score', 50) or 50),
-        'supertrend_points': int(candle.get('supertrend_points', 3) or 3),
+        'supertrend': float(candle.get('supertrend_score', 50) or 50), # supertrend_score is 0-100
+        'supertrend_points': _safe_int(candle.get('supertrend_points'), 3),
         'supertrend_bullish_flip': bool(candle.get('supertrend_bullish_flip', False)),
         'supertrend_bearish_flip': bool(candle.get('supertrend_bearish_flip', False)),
         'sumit_ma': float(candle.get('sumit_ma_score', 50) or 50),
-        'buy_signal_count': int(candle.get('buy_signal_count', 0) or 0),
-        'sell_signal_count': int(candle.get('sell_signal_count', 0) or 0),
+        'buy_signal_count': _safe_int(candle.get('buy_signal_count'), 0),
+        'sell_signal_count': _safe_int(candle.get('sell_signal_count'), 0),
         'cross_avg': float(candle.get('cross_avg_score', 0) or 0),
         'cross_sma9': float(candle.get('cross_sma9', 0) or 0),
         'cross_sma21': float(candle.get('cross_sma21', 0) or 0),
