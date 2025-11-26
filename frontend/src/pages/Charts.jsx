@@ -98,6 +98,9 @@ const Charts = ({ symbol }) => {
       <ChartContainer title="Chart 6: Sumit MA Signals (BUY/SELL Count)">
         <SumitMASignalsChart data={symbolData} interval={selectedInterval} formatDateTime={formatDateTime} />
      </ChartContainer>
+           <ChartContainer title="Chart 7: Aroon Indicator - Multi-Timeframe Analysis">
+        <AroonMultiTimeframeChart data={symbolData} formatDateTime={formatDateTime} />
+      </ChartContainer>
     </div>
   );
 };
@@ -106,7 +109,10 @@ const ChartContainer = ({ title, children }) => (<div className="bg-gray-800 rou
 
 const ImprovedChart = ({ data, interval, lines, showTradingZones = false, formatDateTime }) => {
   const [brushRange, setBrushRange] = useState({ startIndex: 0, endIndex: undefined });
-  const chartData = data[interval]?.map((candle, idx) => {
+  const chartData = data[interval]
+    // Add a filter to remove candles with invalid timestamps before mapping
+    ?.filter(candle => candle.Datetime || candle.Date || candle.index)
+    .map((candle, idx) => {
     const timestamp = candle.Datetime || candle.Date || candle.index;
     const cleanedData = { time: formatDateTime(timestamp, data[interval], idx), timestamp: new Date(timestamp).getTime(), index: idx };
     lines.forEach(line => { const v = candle[line.key]; if (v != null && !isNaN(v)) cleanedData[line.key] = parseFloat(v); });
@@ -232,13 +238,42 @@ const MultiTimeframeSumitChart = ({ data, formatDateTime, showTradingZones = fal
 const CandlestickChart = ({ data, interval, formatDateTime }) => {
   const chartData = data[interval]?.map((candle, idx) => {
     const timestamp = candle.Datetime || candle.Date || candle.index;
+    const open = parseFloat(candle.Open) || 0;
+    const close = parseFloat(candle.Close) || 0;
+    const high = parseFloat(candle.High) || 0;
+    const low = parseFloat(candle.Low) || 0;
     return {
       time: formatDateTime(timestamp, data[interval], idx),
-      Open: parseFloat(candle.Open) || 0, Close: parseFloat(candle.Close) || 0,
-      High: parseFloat(candle.High) || 0, Low: parseFloat(candle.Low) || 0,
-      color: parseFloat(candle.Close) >= parseFloat(candle.Open) ? '#10b981' : '#ef4444'
+      Open: open,
+      Close: close,
+      High: high,
+      Low: low,
+      candleHigh: Math.max(open, close),
+      candleLow: Math.min(open, close),
+      wickHigh: high,
+      wickLow: low,
+      isBullish: close >= open
     };
   }) || [];
+
+  const CustomCandlestick = (props) => {
+    const { x, y, width, height, payload } = props;
+    if (!payload) return null;
+    
+    const { Open, Close, High, Low, isBullish } = payload;
+    const color = isBullish ? '#10b981' : '#ef4444';
+    const bodyHeight = Math.abs(Close - Open);
+    const bodyY = Math.min(Open, Close);
+    
+    return (
+      <g>
+        {/* Wick */}
+        <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke={color} strokeWidth={1} />
+        {/* Body */}
+        <rect x={x} y={bodyY} width={width} height={bodyHeight || 1} fill={color} stroke={color} />
+      </g>
+    );
+  };
 
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -257,7 +292,7 @@ const CandlestickChart = ({ data, interval, formatDateTime }) => {
             </div>
           ) : null} />
         <Brush dataKey="time" height={30} stroke="#3b82f6" fill="#1f2937" />
-        <Bar dataKey="High" fill="#10b981" />
+        <Bar dataKey="High" fill="transparent" shape={<CustomCandlestick />} />
       </ComposedChart>
     </ResponsiveContainer>
   );
@@ -272,7 +307,7 @@ const CrossTimeframeChart = ({ data, formatDateTime }) => {
     if (candle.cross_sma9 != null) d.cross_sma9 = parseFloat(candle.cross_sma9);
     if (candle.cross_sma21 != null) d.cross_sma21 = parseFloat(candle.cross_sma21);
     return d;
-  }).filter(item => item.cross_avg !== undefined) || [];
+  }).filter(item => item.cross_avg !== undefined || item.cross_sma9 !== undefined || item.cross_sma21 !== undefined) || [];
   const startIdx = brushRange.startIndex || 0, endIdx = brushRange.endIndex || chartData.length;
 
   return (
@@ -306,7 +341,7 @@ const SumitMASignalsChart = ({ data, interval, formatDateTime }) => {
       timestamp: new Date(timestamp).getTime(),
       index: idx,
       buySignals: parseInt(candle.buy_signal_count) || 0,
-      sellSignals: -(parseInt(candle.sell_signal_count) || 0),
+      sellSignals: parseInt(candle.sell_signal_count) || 0,
       price: parseFloat(candle.Close) || 0,
     };
   }).filter(item => item.buySignals !== undefined || item.sellSignals !== undefined) || [];
@@ -348,7 +383,7 @@ const SumitMASignalsChart = ({ data, interval, formatDateTime }) => {
       </div>
 
       <ResponsiveContainer width="100%" height={400}>
-        <ComposedChart data={visibleData}>
+        <LineChart data={visibleData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
           <XAxis 
             dataKey="time" 
@@ -359,22 +394,13 @@ const SumitMASignalsChart = ({ data, interval, formatDateTime }) => {
             tick={{ fontSize: 11 }} 
           />
           <YAxis 
-            yAxisId="left"
-            domain={[-18, 18]} 
+            domain={[0, 18]} 
             stroke="#9ca3af"
             label={{ value: 'Signal Count', angle: -90, position: 'insideLeft' }}
           />
           <Tooltip 
             contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }}
-            formatter={(value, name) => {
-              if (name === 'BUY Signals') {
-                return [`${value}/18`, name];
-              }
-              if (name === 'SELL Signals') {
-                return [`${Math.abs(value)}/18`, name];
-              }
-              return [value, name];
-            }}
+            formatter={(value, name) => [`${value}/18`, name]}
           />
           <Legend />
           <Brush 
@@ -391,28 +417,30 @@ const SumitMASignalsChart = ({ data, interval, formatDateTime }) => {
           />
           
           {/* Reference lines for signal strength zones */}
-          <ReferenceLine yAxisId="left" y={15} stroke="#10b981" strokeDasharray="3 3" label="Very Strong" />
-          <ReferenceLine yAxisId="left" y={12} stroke="#84cc16" strokeDasharray="3 3" label="Strong" />
-          <ReferenceLine yAxisId="left" y={9} stroke="#fbbf24" strokeDasharray="3 3" label="Moderate" />
+          <ReferenceLine y={15} stroke="#10b981" strokeDasharray="3 3" label="Very Strong" />
+          <ReferenceLine y={12} stroke="#84cc16" strokeDasharray="3 3" label="Strong" />
+          <ReferenceLine y={9} stroke="#fbbf24" strokeDasharray="3 3" label="Moderate" />
           
-          {/* BUY signals as green bars */}
-          <Bar 
-            yAxisId="left"
+          {/* BUY signals as green line */}
+          <Line 
+            type="monotone"
             dataKey="buySignals" 
-            fill="#10b981" 
+            stroke="#10b981" 
             name="BUY Signals"
-            opacity={0.8}
+            strokeWidth={2}
+            dot={false}
           />
           
-          {/* SELL signals as red bars (negative values for visual distinction) */}
-          <Bar 
-            yAxisId="left"
+          {/* SELL signals as red line (convert negative to positive for display) */}
+          <Line 
+            type="monotone"
             dataKey="sellSignals" 
-            fill="#ef4444" 
+            stroke="#ef4444" 
             name="SELL Signals"
-            opacity={0.8}
+            strokeWidth={2}
+            dot={false}
           />
-        </ComposedChart>
+        </LineChart>
       </ResponsiveContainer>
 
       {/* Latest Signal Summary */}
@@ -446,6 +474,45 @@ const SumitMASignalsChart = ({ data, interval, formatDateTime }) => {
         </div>
       )}
     </div>
+  );
+};
+
+const AroonMultiTimeframeChart = ({ data, formatDateTime }) => {
+  const [brushRange, setBrushRange] = useState({ startIndex: 0, endIndex: undefined });
+  const chartData = data['1m']?.map((candle, idx) => ({
+    time: formatDateTime(candle.Datetime || candle.Date, data['1m'], idx),
+    aroon_1m: parseFloat(candle.aroon_1m_cross),
+    aroon_5m: parseFloat(candle.aroon_5m_cross),
+    aroon_1h: parseFloat(candle.aroon_1h_cross),
+    aroon_avg: parseFloat(candle.aroon_avg_cross),
+    aroon_sma9: parseFloat(candle.aroon_sma9_cross)
+  })).filter(i => 
+       !isNaN(i.aroon_1m) || 
+       !isNaN(i.aroon_5m) || 
+       !isNaN(i.aroon_1h) || 
+       !isNaN(i.aroon_avg) || 
+       !isNaN(i.aroon_sma9)) || [];
+  const startIdx = brushRange.startIndex || 0, endIdx = brushRange.endIndex || chartData.length;
+
+  return (
+    <ResponsiveContainer width="100%" height={400}>
+      <LineChart data={chartData.slice(startIdx, endIdx)}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+        <XAxis dataKey="time" stroke="#9ca3af" angle={-45} textAnchor="end" height={80} tick={{ fontSize: 11 }} />
+        <YAxis domain={[0, 100]} stroke="#9ca3af" />
+        <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} formatter={(v) => v?.toFixed(2)} />
+        <Legend />
+        <Brush dataKey="time" height={30} stroke="#3b82f6" fill="#1f2937" data={chartData} startIndex={startIdx} endIndex={endIdx} onChange={(r) => { if (r) setBrushRange({ startIndex: r.startIndex, endIndex: r.endIndex }); }} />
+        <ReferenceLine y={70} stroke="#10b981" strokeDasharray="3 3" />
+        <ReferenceLine y={50} stroke="#6b7280" strokeDasharray="3 3" />
+        <ReferenceLine y={30} stroke="#ef4444" strokeDasharray="3 3" />
+        <Line type="monotone" dataKey="aroon_1m" stroke="#3b82f6" name="1m Aroon" dot={false} strokeWidth={2} connectNulls />
+        <Line type="monotone" dataKey="aroon_5m" stroke="#10b981" name="5m Aroon" dot={false} strokeWidth={2} connectNulls />
+        <Line type="monotone" dataKey="aroon_1h" stroke="#f59e0b" name="1h Aroon" dot={false} strokeWidth={2} connectNulls />
+        <Line type="monotone" dataKey="aroon_avg" stroke="#9b59b6" name="Avg Aroon" dot={false} strokeWidth={3} connectNulls />
+        <Line type="monotone" dataKey="aroon_sma9" stroke="#ef4444" name="SMA9" dot={false} strokeWidth={2} strokeDasharray="5 5" connectNulls />
+      </LineChart>
+    </ResponsiveContainer>
   );
 };
 

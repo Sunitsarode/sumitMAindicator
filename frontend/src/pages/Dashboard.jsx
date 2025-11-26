@@ -146,19 +146,33 @@ const SymbolCard = ({ symbolData, fullData, onSymbolClick, onLiveClick }) => {
 };
 
 const MiniCandlestick = ({ open, high, low, close, avgLine, isBullish }) => {
+  // --- Robustness Checks ---
+  if ([open, high, low, close].some(v => v === undefined || v === null || isNaN(v))) {
+    return <div className="h-[150px] flex items-center justify-center text-gray-500 text-xs">Invalid Data</div>;
+  }
+
   const svgHeight = 150, svgWidth = 100, padding = 15;
-  const priceRange = high - low, scale = (svgHeight - 2 * padding) / priceRange;
-  const toY = (price) => svgHeight - padding - (price - low) * scale;
+  const priceRange = high - low;
+
+  // Handle case where high equals low to prevent division by zero
+  const isFlat = priceRange < 0.00001;
+  const scale = isFlat ? 0 : (svgHeight - 2 * padding) / priceRange;
+  
+  const toY = (price) => {
+    if (isFlat) return svgHeight / 2; // Center vertically if flat
+    return svgHeight - padding - (price - low) * scale;
+  };
+
   const openY = toY(open), highY = toY(high), lowY = toY(low), closeY = toY(close), avgY = toY(avgLine);
   const bodyTop = Math.min(openY, closeY), bodyHeight = Math.abs(openY - closeY) || 1;
   const bodyWidth = 20, centerX = svgWidth / 2, color = isBullish ? '#10b981' : '#ef4444';
-  
+
   return (
     <div className="flex justify-center">
       <svg width={svgWidth} height={svgHeight}>
-        <line x1={centerX} y1={highY} x2={centerX} y2={lowY} stroke={color} strokeWidth="1.5" />
+        <line x1={centerX} y1={isFlat ? svgHeight / 2 : highY} x2={centerX} y2={isFlat ? svgHeight / 2 : lowY} stroke={color} strokeWidth="1.5" />
         <rect x={centerX - bodyWidth / 2} y={bodyTop} width={bodyWidth} height={bodyHeight} fill={color} stroke={color} />
-        <line x1={padding} y1={avgY} x2={svgWidth - padding} y2={avgY} stroke="#3b82f6" strokeWidth="1.5" strokeDasharray="3,3" />
+        {avgLine && <line x1={padding} y1={avgY} x2={svgWidth - padding} y2={avgY} stroke="#3b82f6" strokeWidth="1.5" strokeDasharray="3,3" />}
         <text x="5" y={highY} fill="#9ca3af" fontSize="9">{high.toFixed(1)}</text>
         <text x="5" y={lowY} fill="#9ca3af" fontSize="9">{low.toFixed(1)}</text>
         <circle cx={centerX} cy={openY} r="2" fill="#10b981" />
