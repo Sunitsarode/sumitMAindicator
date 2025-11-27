@@ -4,6 +4,12 @@ import LiveAnalysis from './pages/LiveAnalysis';
 import Charts from './pages/Charts';
 import Notifications from './pages/Notifications';
 
+// Debugging imports
+console.log('Dashboard import:', Dashboard);
+console.log('LiveAnalysis import:', LiveAnalysis);
+console.log('Charts import:', Charts);
+console.log('Notifications import:', Notifications);
+
 const App = () => {
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [selectedSymbol, setSelectedSymbol] = useState(null);

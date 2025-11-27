@@ -5,16 +5,16 @@ from routes.dashboard import dashboard_bp
 from routes.symbol import symbol_bp
 from routes.trades import trades_bp
 from utils.scheduler import update_all_data, fetch_initial_data
-from auto_trader import run_auto_trader  # NEW
-import json
+from auto_trader_refactored import run_auto_trader  # Updated import
+from utils.config_manager import config  # New import
+from utils.logging_config import logger  # New import
 import atexit
+import pytz
 
 app = Flask(__name__)
 CORS(app)
 
-with open('config.json', 'r') as f:
-    config = json.load(f)
-
+# Register blueprints
 app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
 app.register_blueprint(symbol_bp, url_prefix='/api/symbol')
 app.register_blueprint(trades_bp, url_prefix='/api/trades')
@@ -23,29 +23,35 @@ app.register_blueprint(trades_bp, url_prefix='/api/trades')
 print("\n" + "="*50)
 print("🚀 STARTING TRADING DASHBOARD + AUTO TRADER")
 print("="*50)
+logger.info("Starting Trading Dashboard")
 fetch_initial_data()
 
-# Setup scheduler
-scheduler = BackgroundScheduler()
+# Setup scheduler with timezone
+timezone = pytz.timezone(config.TIMEZONE)
+scheduler = BackgroundScheduler(timezone=timezone)
 
 # Job 1: Update market data
 scheduler.add_job(
     func=update_all_data,
     trigger="interval",
-    minutes=config.get('updateIntervalMinutes', 1),
-    id='update_data'
+    minutes=config.UPDATE_INTERVAL_MINUTES,
+    id='update_data',
+    timezone=timezone
 )
 
-# Job 2: Auto trader - runs every 30 seconds
+# Job 2: Auto trader
 scheduler.add_job(
     func=run_auto_trader,
     trigger="interval",
-    seconds=30,
-    id='auto_trader'
+    seconds=config.AUTO_TRADER_INTERVAL_SECONDS,
+    id='auto_trader',
+    timezone=timezone
 )
 
 scheduler.start()
-print("✅ Auto Trader Started - Running every 30 seconds")
+logger.info(f"✅ Auto Trader Started - Running every {config.AUTO_TRADER_INTERVAL_SECONDS} seconds")
+logger.info(f"✅ Data Updates - Running every {config.UPDATE_INTERVAL_MINUTES} minute(s)")
+logger.info(f"✅ Timezone: {config.TIMEZONE}")
 
 atexit.register(lambda: scheduler.shutdown())
 
@@ -53,9 +59,16 @@ atexit.register(lambda: scheduler.shutdown())
 def home():
     return jsonify({
         "status": "Trading Dashboard API Running",
-        "version": "1.0",
-        "auto_trader": "ACTIVE"
+        "version": "2.0",
+        "auto_trader": "ACTIVE",
+        "timezone": config.TIMEZONE,
+        "symbols": config.SYMBOLS,
+        "max_positions": config.MAX_OPEN_POSITIONS
     })
 
 if __name__ == '__main__':
-    app.run(debug=False, port=5000, host='0.0.0.0')  # host=0.0.0.0 for server access
+    app.run(
+        debug=config.FLASK_DEBUG,
+        port=config.FLASK_PORT,
+        host=config.FLASK_HOST
+    )

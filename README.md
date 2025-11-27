@@ -116,4 +116,15 @@ Performance
         3. Fetches full history repeatedly
 Production Gaps
         No monitoring/alerting
-       
+
+FRONTEND ISSUE:
+charts.jsx : 
+1. Chart 4: Price Chart (OHLC) : HERE I NEED CANDELSTICK CHART WITH MOVING AVG 9,21,51,101
+2. Chart 5: Cross-Timeframe Sumit MA with SMA Crossover : SHOW BLANK NO OUTPUT SEEN
+3. Chart 6: Sumit MA Signals (BUY/SELL Count) : ONLY NEED LINE CHART OF RANGE 0-18 VALUES REMOVE CURRENTLY RANGE (-18 -18) , ADD MA3 AND MA9 TO THIS LINE CHART.
+Notifications.jsx : 
+1. add entry time to the table
+
+"ALL TIMING SHOULD BE IN IST"
+
+IMP NOTES : Read this github project CAREFULLY.. ITS A WORKING LIVE PROJECT..if small change in file give me change only.. if more change then give me completely code.. give all code step step in seperate code windows.. mention filename at top

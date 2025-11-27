@@ -1,6 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { API } from '../config';
 
+// Convert UTC to IST
+const toIST = (timestamp) => {
+  if (!timestamp) return 'N/A';
+  const date = new Date(timestamp);
+  return new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+};
+
+const formatTimeIST = (ts) => {
+  if (!ts) return 'N/A';
+  const istDate = toIST(ts);
+  return istDate.toLocaleString('en-IN', { 
+    day: '2-digit', 
+    month: 'short', 
+    year: 'numeric',
+    hour: '2-digit', 
+    minute: '2-digit', 
+    second: '2-digit',
+    hour12: false
+  });
+};
+
 const Notifications = ({ symbol }) => {
   const [trades, setTrades] = useState([]);
   const [openPositions, setOpenPositions] = useState([]);
@@ -45,26 +66,39 @@ const Notifications = ({ symbol }) => {
   }, [symbol]);
 
   const exportReport = () => {
-    const report = { symbol, totalPL, totalTrades: trades.length, winRate: trades.length > 0 ? (trades.filter(t => t.pl > 0).length / trades.length * 100).toFixed(1) : 0, openPositions, trades, generatedAt: new Date().toISOString() };
+    const report = { 
+      symbol, totalPL, totalTrades: trades.length, 
+      winRate: trades.length > 0 ? (trades.filter(t => t.pl > 0).length / trades.length * 100).toFixed(1) : 0, 
+      openPositions, trades, 
+      generatedAt: toIST(new Date()).toISOString()
+    };
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `trade_report_${symbol}_${Date.now()}.json`; a.click();
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob); 
+    a.download = `trade_report_${symbol}_${Date.now()}.json`; 
+    a.click();
   };
 
   const clearData = async () => {
     if (!symbol || !confirm('Clear all trade data?')) return;
-    try { await fetch(API.tradesClear(symbol), { method: 'DELETE' }); setTrades([]); setOpenPositions([]); setTotalPL(0); } catch (err) { console.error('Clear error:', err); }
+    try { 
+      await fetch(API.tradesClear(symbol), { method: 'DELETE' }); 
+      setTrades([]); 
+      setOpenPositions([]); 
+      setTotalPL(0); 
+    } catch (err) { console.error('Clear error:', err); }
   };
-
-  const formatTime = (ts) => new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   
   const getReasonBadge = (reason) => {
-    const colors = { SL: 'bg-red-600', PROFIT: 'bg-green-600', REVERSAL: 'bg-yellow-600', CROSS_REVERSAL: 'bg-orange-600', MANUAL: 'bg-blue-600' };
+    const colors = { 
+      SL: 'bg-red-600', PROFIT: 'bg-green-600', REVERSAL: 'bg-yellow-600', 
+      CROSS_REVERSAL: 'bg-orange-600', MANUAL: 'bg-blue-600' 
+    };
     return <span className={`${colors[reason] || 'bg-gray-500'} px-2 py-1 rounded text-xs font-semibold`}>{reason}</span>;
   };
 
   const calcUnrealizedPL = (pos) => !currentPrice ? 0 : pos.direction === 'LONG' ? currentPrice - pos.entryPrice : pos.entryPrice - currentPrice;
 
-  // Format indicator criteria for display
   const formatEntryCriteria = (trade) => {
     const ec = trade.entryCriteria;
     if (!ec) return <span className="text-gray-500 text-xs">N/A</span>;
@@ -77,14 +111,14 @@ const Notifications = ({ symbol }) => {
         </div>
         <div className="flex gap-1 flex-wrap">
           <span className="bg-yellow-700 px-1 rounded">ADX:{ec.adx?.toFixed(0) || '-'}</span>
-          <span className="bg-pink-700 px-1 rounded">ST:{ec.supertrend?.toFixed(0) || '-'}</span>
+          <span className="bg-pink-700 px-1 rounded">ST:{ec.supertrend?.toFixed(0) || '-'} ({ec.supertrend_points || 0}/6)</span>
         </div>
         <div className="flex gap-1 flex-wrap">
           <span className="bg-green-700 px-1 rounded">SMA:{ec.sumit_ma?.toFixed(0) || '-'}</span>
-          {ec.cross_sma9 && <span className="bg-cyan-700 px-1 rounded">C9:{ec.cross_sma9?.toFixed(0)}</span>}
-          {ec.cross_sma21 && <span className="bg-orange-700 px-1 rounded">C21:{ec.cross_sma21?.toFixed(0)}</span>}
+          <span className="bg-cyan-700 px-1 rounded">BUY:{ec.buy_signal_count || 0}/18</span>
+          <span className="bg-orange-700 px-1 rounded">SELL:{ec.sell_signal_count || 0}/18</span>
         </div>
-        {ec.cross_avg && <div><span className="bg-indigo-700 px-1 rounded">CrossAvg:{ec.cross_avg?.toFixed(1)}</span></div>}
+        {ec.cross_sma9 && <div><span className="bg-indigo-700 px-1 rounded">C9:{ec.cross_sma9?.toFixed(0)} | C21:{ec.cross_sma21?.toFixed(0)}</span></div>}
       </div>
     );
   };
@@ -101,14 +135,13 @@ const Notifications = ({ symbol }) => {
         </div>
         <div className="flex gap-1 flex-wrap">
           <span className="bg-yellow-700 px-1 rounded">ADX:{ec.adx?.toFixed(0) || '-'}</span>
-          <span className="bg-pink-700 px-1 rounded">ST:{ec.supertrend?.toFixed(0) || '-'}</span>
+          <span className="bg-pink-700 px-1 rounded">ST:{ec.supertrend?.toFixed(0) || '-'} ({ec.supertrend_points || 0}/6)</span>
         </div>
         <div className="flex gap-1 flex-wrap">
           <span className="bg-green-700 px-1 rounded">SMA:{ec.sumit_ma?.toFixed(0) || '-'}</span>
-          {ec.cross_sma9 && <span className="bg-cyan-700 px-1 rounded">C9:{ec.cross_sma9?.toFixed(0)}</span>}
-          {ec.cross_sma21 && <span className="bg-orange-700 px-1 rounded">C21:{ec.cross_sma21?.toFixed(0)}</span>}
+          <span className="bg-cyan-700 px-1 rounded">BUY:{ec.buy_signal_count || 0}/18</span>
+          <span className="bg-orange-700 px-1 rounded">SELL:{ec.sell_signal_count || 0}/18</span>
         </div>
-        {ec.cross_avg && <div><span className="bg-indigo-700 px-1 rounded">CrossAvg:{ec.cross_avg?.toFixed(1)}</span></div>}
         {trade.reason === 'SL' && <div className="text-red-400">SL Hit @ {trade.exitPrice?.toFixed(2)}</div>}
         {trade.reason === 'PROFIT' && <div className="text-green-400">Target Hit</div>}
       </div>
@@ -125,7 +158,7 @@ const Notifications = ({ symbol }) => {
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-2xl font-bold">📊 Auto Trader - {symbol || 'Select Symbol'}</h2>
+            <h2 className="text-2xl font-bold">📊 Auto Trader - {symbol || 'Select Symbol'} (IST)</h2>
             <p className="text-sm text-green-400 mt-1">🤖 Backend auto-trading active</p>
           </div>
           <div className="flex items-center gap-3">
@@ -183,7 +216,7 @@ const Notifications = ({ symbol }) => {
                     <div><span className="text-gray-400">Current:</span> <span className="font-mono text-yellow-400">{currentPrice.toFixed(2)}</span></div>
                     <div><span className="text-gray-400">SL:</span> <span className="font-mono text-red-400">{pos.stopLoss?.toFixed(2)}</span></div>
                     <div><span className="text-gray-400">Signal:</span> {pos.strength}</div>
-                    <div><span className="text-gray-400">Time:</span> {formatTime(pos.entryTime)}</div>
+                    <div><span className="text-gray-400">Entry Time:</span> {formatTimeIST(pos.entryTime)}</div>
                     <div>
                       {pos.entryCriteria && (
                         <div className="text-xs">
@@ -204,14 +237,15 @@ const Notifications = ({ symbol }) => {
       {/* Trade History Table */}
       <div className="bg-gray-800 rounded-lg overflow-hidden">
         <div className="p-4 border-b border-gray-700">
-          <h3 className="text-lg font-bold">📋 Trade History ({trades.length})</h3>
-          <p className="text-xs text-gray-400 mt-1">RSI | MACD | ADX | ST (Supertrend) | SMA (Sumit MA) | C9/C21 (Cross SMA9/21) | CrossAvg</p>
+          <h3 className="text-lg font-bold">📋 Trade History ({trades.length}) - All Times in IST</h3>
+          <p className="text-xs text-gray-400 mt-1">RSI | MACD | ADX | ST (Supertrend) | SMA (Sumit MA) | BUY/SELL (Signal Counts)</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-700">
               <tr>
-                <th className="px-3 py-3 text-left text-sm">Exit Time</th>
+                <th className="px-3 py-3 text-left text-sm">Entry Time (IST)</th>
+                <th className="px-3 py-3 text-left text-sm">Exit Time (IST)</th>
                 <th className="px-3 py-3 text-left text-sm">Signal</th>
                 <th className="px-3 py-3 text-right text-sm">Entry</th>
                 <th className="px-3 py-3 text-right text-sm">Exit</th>
@@ -223,10 +257,11 @@ const Notifications = ({ symbol }) => {
             </thead>
             <tbody>
               {trades.length === 0 ? (
-                <tr><td colSpan="8" className="px-4 py-8 text-center text-gray-500">No trades yet.</td></tr>
+                <tr><td colSpan="9" className="px-4 py-8 text-center text-gray-500">No trades yet.</td></tr>
               ) : trades.slice(0, 100).map((t, i) => (
                 <tr key={t.id} className={`border-t border-gray-700 ${i % 2 === 0 ? 'bg-gray-800' : 'bg-gray-750'}`}>
-                  <td className="px-3 py-3 text-sm whitespace-nowrap">{formatTime(t.timestamp)}</td>
+                  <td className="px-3 py-3 text-sm whitespace-nowrap">{formatTimeIST(t.entryTime)}</td>
+                  <td className="px-3 py-3 text-sm whitespace-nowrap">{formatTimeIST(t.timestamp)}</td>
                   <td className="px-3 py-3">
                     <span className={`px-2 py-1 rounded text-xs font-semibold ${t.direction === 'LONG' ? 'bg-green-600' : 'bg-red-600'}`}>{t.direction}</span>
                     <div className="text-xs text-gray-400 mt-1">[{t.signalType || 'IND'}]</div>
