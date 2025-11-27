@@ -79,3 +79,41 @@ Example in autotrader.py
         'supertrend': ('>', 50), 
         'supertrend_flip': 'bullish'  # as soon as the supertrend flip to bullish from bearish the entry will done
 
+
+BACKEND ISSUE :
+Add Notification to existing system 
+1. notification integration : "notifications": {
+    "enabled": true,
+    "method": "telegram",
+    "telegram": {
+      "token": "YOUR_BOT_TOKEN",
+      "chat_id": "YOUR_CHAT_ID"
+    },
+    "ntfy": {
+      "endpoint": "https://ntfy.sh/your-topic"
+    }
+  },
+2. convert config.json to .env file
+3. divide auto_trader.py to 3 modules auto_trader to reduce code 
+   give option to turn of logs = true / false
+   Logs rotate indefinitely (disk space)
+
+4. Async Processing - Process multiple symbols in parallel
+5. Better Caching - Keep only last 200 candles in memory
+6. Rate Limiting - Prevent yfinance API throttling
+7. Multiple positions modified simultaneously without locks
+8. File I/O not thread-safe (temp file pattern insufficient)
+9. Auto-trader runs every 30s while data updates every 1m - timing conflicts
+
+Data Quality Issues
+       1. Supertrend calculation can fail silently, returns NaN
+       2. No validation that indicators are ready before trading
+       3. Missing data handling inconsistent
+Performance
+
+        1. Recalculates ALL 301-period MAs on every update
+        2. No incremental updates
+        3. Fetches full history repeatedly
+Production Gaps
+        No monitoring/alerting
+       
