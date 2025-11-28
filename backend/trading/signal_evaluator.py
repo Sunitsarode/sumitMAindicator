@@ -4,10 +4,57 @@ Signal Evaluator - Evaluates entry/exit conditions
 from utils.logging_config import logger
 from utils.config_manager import config
 
-# Load entry conditions from config
-LONG_CONDITIONS = config.ENTRY_CONDITIONS.get('long', {})
-SHORT_CONDITIONS = config.ENTRY_CONDITIONS.get('short', {})
+# FOR : Load entry conditions from config 
+#LONG_CONDITIONS = config.ENTRY_CONDITIONS.get('long', {})
+#SHORT_CONDITIONS = config.ENTRY_CONDITIONS.get('short', {})
 
+# ============================================
+# LONG ENTRY CONDITIONS
+# ============================================
+LONG_CONDITIONS = {
+    '1m': {
+        'rsi': {'operator': '>', 'value': 30},
+        'supertrend': {'operator': '>', 'value': 50},
+        'supertrend_flip': 'bullish',
+        'buy_signal_count': {'operator': '>', 'value': 12}
+    },
+    '5m': {
+        'rsi': {'operator': '>', 'value': 35},
+        'sumit_ma': {'operator': '>', 'value': 40},
+        'buy_signal_count': {'operator': '>', 'value': 10}
+    },
+    '1h': {
+        'sumit_ma': {'operator': '>', 'value': 30}
+    },
+    'cross': {
+        'type': 'GOLDEN',
+        'cross_avg_max': 40
+    }
+}
+
+# ============================================
+# SHORT ENTRY CONDITIONS
+# ============================================
+SHORT_CONDITIONS = {
+    '1m': {
+        'rsi': {'operator': '<', 'value': 70},
+        'supertrend': {'operator': '<', 'value': 50},
+        'supertrend_flip': 'bearish',
+        'sell_signal_count': {'operator': '>', 'value': 12}
+    },
+    '5m': {
+        'rsi': {'operator': '<', 'value': 65},
+        'sumit_ma': {'operator': '<', 'value': 60},
+        'sell_signal_count': {'operator': '>', 'value': 10}
+    },
+    '1h': {
+        'sumit_ma': {'operator': '<', 'value': 70}
+    },
+    'cross': {
+        'type': 'DEATH',
+        'cross_avg_min': 60
+    }
+}
 def detect_cross(curr, prev):
     """Detect SMA crossovers"""
     try:
