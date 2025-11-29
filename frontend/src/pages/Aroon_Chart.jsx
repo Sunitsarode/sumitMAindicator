@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Brush } from 'recharts';
 
 const toIST = (timestamp) => {
-  const date = new Date(timestamp);
-  return new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+  return new Date(timestamp); // Backend already sends IST
 };
 
 const AroonMultiTimeframeChart = ({ data, formatDateTime }) => {

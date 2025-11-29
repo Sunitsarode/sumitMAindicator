@@ -1,8 +1,7 @@
 // CHART COMPONENTS - Part 2 of Charts.jsx
 
 const toIST = (timestamp) => {
-  const date = new Date(timestamp);
-  return new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+  return new Date(timestamp); // Backend already sends IST
 };
 
 const MultiTimeframeSumitChart = ({ data, formatDateTime, showTradingZones = false }) => {

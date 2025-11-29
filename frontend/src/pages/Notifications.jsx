@@ -3,9 +3,7 @@ import { API } from '../config';
 
 // Convert UTC to IST
 const toIST = (timestamp) => {
-  if (!timestamp) return 'N/A';
-  const date = new Date(timestamp);
-  return new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+  return new Date(timestamp); // Backend already sends IST
 };
 
 const formatTimeIST = (ts) => {

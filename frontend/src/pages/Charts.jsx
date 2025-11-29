@@ -6,8 +6,7 @@ import AroonMultiTimeframeChart from './Aroon_Chart';
 
 // Helper to convert UTC to IST
 const toIST = (timestamp) => {
-  const date = new Date(timestamp);
-  return new Date(date.getTime() + (5.5 * 60 * 60 * 1000)); // Add 5:30 for IST
+  return new Date(timestamp); // Backend already sends IST
 };
 
 const Charts = ({ symbol }) => {

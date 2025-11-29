@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import LiveAnalysis from './pages/LiveAnalysis';
 import Charts from './pages/Charts';
@@ -9,20 +10,8 @@ console.log('Dashboard import:', Dashboard);
 console.log('LiveAnalysis import:', LiveAnalysis);
 console.log('Charts import:', Charts);
 console.log('Notifications import:', Notifications);
-
 const App = () => {
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  const [selectedSymbol, setSelectedSymbol] = useState(null);
-
-  const handleSymbolSelect = (symbol) => {
-    setSelectedSymbol(symbol);
-    setCurrentPage('charts');
-  };
-
-  const handleLiveAnalysisSelect = (symbol) => {
-    setSelectedSymbol(symbol);
-    setCurrentPage('live');
-  };
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -34,54 +23,41 @@ const App = () => {
             
             <div className="flex gap-2">
               <button
-                onClick={() => setCurrentPage('dashboard')}
-                className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'dashboard' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
+                onClick={() => navigate('/')}
+                className="px-4 py-2 rounded-lg transition font-semibold bg-gray-700 text-gray-300 hover:bg-gray-600"
               >
                 📊 Dashboard
-              </button>
-              <button
-                onClick={() => setCurrentPage('live')}
-                className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'live' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                🔴 Live Analysis
-              </button>
-              <button
-                onClick={() => setCurrentPage('charts')}
-                className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'charts' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-                disabled={!selectedSymbol}
-              >
-                📈 Charts {selectedSymbol && `(${selectedSymbol})`}
-              </button>
-              <button
-                onClick={() => setCurrentPage('notifications')}
-                className={`px-4 py-2 rounded-lg transition font-semibold ${
-                  currentPage === 'notifications' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                🔔 Trades
               </button>
             </div>
           </div>
         </div>
       </nav>
 
-      {/* Page Content */}
+      {/* Routes */}
       <main className="p-6">
-        {currentPage === 'dashboard' && (
-          <Dashboard onSymbolClick={handleSymbolSelect} onLiveClick={handleLiveAnalysisSelect} />
-        )}
-        {currentPage === 'live' && <LiveAnalysis symbol={selectedSymbol} />}
-        {currentPage === 'charts' && <Charts symbol={selectedSymbol} />}
-        {currentPage === 'notifications' && <Notifications symbol={selectedSymbol} />}
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/:symbol/live" element={<LiveAnalysisWrapper />} />
+          <Route path="/:symbol/charts" element={<ChartsWrapper />} />
+          <Route path="/:symbol/trades" element={<NotificationsWrapper />} />
+        </Routes>
       </main>
     </div>
   );
+};
+const LiveAnalysisWrapper = () => {
+  const { symbol } = useParams();
+  return <LiveAnalysis symbol={symbol} />;
+};
+
+const ChartsWrapper = () => {
+  const { symbol } = useParams();
+  return <Charts symbol={symbol} />;
+};
+
+const NotificationsWrapper = () => {
+  const { symbol } = useParams();
+  return <Notifications symbol={symbol} />;
 };
 
 export default App;

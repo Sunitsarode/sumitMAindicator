@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import json
 from datetime import datetime
+import pytz  # Add this import
 
 def load_config():
     with open('config.json', 'r') as f:
@@ -11,6 +12,7 @@ def fetch_data(symbol, interval, period):
     """
     Fetch OHLC data from yfinance
     Note: 1m data limited to last 7 days
+    ALL timestamps converted to IST
     """
     try:
         ticker = yf.Ticker(symbol)
@@ -19,7 +21,17 @@ def fetch_data(symbol, interval, period):
         if df.empty:
             print(f"Warning: No data retrieved for {symbol} at {interval}")
             return None
-            
+        
+        # Convert timezone to IST
+        ist = pytz.timezone('Asia/Kolkata')
+        if df.index.tz is None:
+            # If no timezone, assume UTC
+            df.index = df.index.tz_localize('UTC')
+        df.index = df.index.tz_convert(ist)
+        
+        # Remove timezone info (keep IST time, but make it naive)
+        df.index = df.index.tz_localize(None)
+        
         df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
         return df
     
@@ -41,6 +53,6 @@ def fetch_all_symbols():
             
             if df is not None:
                 data_cache[symbol][interval] = df
-                print(f"Fetched {len(df)} candles for {symbol} at {interval}")
+                print(f"Fetched {len(df)} candles for {symbol} at {interval} (IST)")
     
     return data_cache

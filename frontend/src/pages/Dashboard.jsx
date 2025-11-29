@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { API } from '../config';
+import { useNavigate } from 'react-router-dom';
 
-const Dashboard = ({ onSymbolClick, onLiveClick }) => {
+const Dashboard = () => {
+  const navigate = useNavigate();
+
+//const Dashboard = ({ onSymbolClick, onLiveClick }) => {
   const [dashboardData, setDashboardData] = useState([]);
   const [symbolsFullData, setSymbolsFullData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -57,20 +61,16 @@ const Dashboard = ({ onSymbolClick, onLiveClick }) => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">All Symbols Overview</h2>
-        <div className="flex items-center gap-4">
-          {lastUpdate && <div className="text-sm text-gray-400 animate-pulse">🔴 Live - Last Update: {lastUpdate.toLocaleTimeString()}</div>}
-          <button onClick={fetchDashboard} className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition font-semibold">🔄 Refresh</button>
-        </div>
-      </div>
-      {dashboardData.length === 0 ? (
-        <div className="text-gray-400">No data available. Backend is starting up...</div>
-      ) : (
-        dashboardData.map((symbolData) => (
-          <SymbolCard key={symbolData.symbol} symbolData={symbolData} fullData={symbolsFullData[symbolData.symbol]} onSymbolClick={onSymbolClick} onLiveClick={onLiveClick} />
-        ))
-      )}
+      {/* ... */}
+      {dashboardData.map((symbolData) => (
+        <SymbolCard 
+          key={symbolData.symbol} 
+          symbolData={symbolData} 
+          fullData={symbolsFullData[symbolData.symbol]} 
+          onSymbolClick={(symbol) => navigate(`/${symbol}/charts`)}
+          onLiveClick={(symbol) => navigate(`/${symbol}/live`)}
+        />
+      ))}
     </div>
   );
 };

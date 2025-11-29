@@ -128,3 +128,6 @@ Notifications.jsx :
 "ALL TIMING SHOULD BE IN IST"
 
 IMP NOTES : Read this github project CAREFULLY.. ITS A WORKING LIVE PROJECT..if small change in file give me change only.. if more change then give me completely code.. give all code step step in seperate code windows.. mention filename at top
+
+the chart showing very different time in case of ^NSEI 
+"ALL TIMING of charts and trades  SHOULD BE IN IST" 
