@@ -48,6 +48,7 @@ def fetch_initial_data():
                 print(f"✗ {symbol} at {interval}: {str(e)}")
         
         # Calculate NEW Multi-Timeframe Supertrend Score
+        # Calculate NEW Multi-Timeframe Supertrend Score
         if '1m' in symbol_data and '5m' in symbol_data and '1h' in symbol_data:
             try:
                 st_settings = [(st['period'], st['multiplier']) for st in config['indicators']['supertrend']]
@@ -58,18 +59,34 @@ def fetch_initial_data():
                     st_settings=st_settings
                 )
                 
-                # Update all timeframes with the new supertrend score
+                # NEW: Get individual supertrend states
+                from indicators.supertrend import get_individual_supertrend_states
+                individual_st = get_individual_supertrend_states(
+                    symbol_data['1m'],
+                    symbol_data['5m'],
+                    symbol_data['1h'],
+                    st_settings=st_settings
+                )
+                
+                # Update all timeframes with the new supertrend score AND individual states
                 for interval in ['1m', '5m', '1h']:
                     cached = symbol_data[interval].copy()
                     cached.loc[cached.index[-1], 'supertrend_score'] = st_result['score_0_100']
                     cached.loc[cached.index[-1], 'supertrend_points'] = st_result['total_points']
                     cached.loc[cached.index[-1], 'supertrend_bullish_flip'] = st_result['bullish_flip']
                     cached.loc[cached.index[-1], 'supertrend_bearish_flip'] = st_result['bearish_flip']
+                    
+                    # NEW: Add individual ST states to latest candle
+                    if interval in individual_st:
+                        for key, value in individual_st[interval].items():
+                            cached.loc[cached.index[-1], key] = value
+                    
                     update_cache(symbol, interval, cached)
                     symbol_data[interval] = cached
                 
                 print(f"✓ {symbol}: NEW Supertrend MTF score = {st_result['score_0_100']} ({st_result['total_points']}/6 points)")
-                print(f"  Bullish Flip: {st_result['bullish_flip']} | Bearish Flip: {st_result['bearish_flip']}\n")
+                print(f"  Bullish Flip: {st_result['bullish_flip']} | Bearish Flip: {st_result['bearish_flip']}")
+                print(f"  Individual ST states added for all timeframes\n")
                 
             except Exception as e:
                 print(f"✗ {symbol}: Supertrend MTF error: {str(e)}")
@@ -153,6 +170,7 @@ def update_all_data():
                 print(f"✗ {symbol}/{interval}: {str(e)}")
         
         # Calculate NEW Multi-Timeframe Supertrend Score
+   # Calculate NEW Multi-Timeframe Supertrend Score
         if '1m' in symbol_data and '5m' in symbol_data and '1h' in symbol_data:
             try:
                 st_settings = [(st['period'], st['multiplier']) for st in config['indicators']['supertrend']]
@@ -163,18 +181,39 @@ def update_all_data():
                     st_settings=st_settings
                 )
                 
+                # NEW: Get individual supertrend states
+                from indicators.supertrend import get_individual_supertrend_states
+                individual_st = get_individual_supertrend_states(
+                    symbol_data['1m'],
+                    symbol_data['5m'],
+                    symbol_data['1h'],
+                    st_settings=st_settings
+                )
+                
+                # Update all timeframes with the new supertrend score AND individual states
                 for interval in ['1m', '5m', '1h']:
                     cached = symbol_data[interval].copy()
                     cached.loc[cached.index[-1], 'supertrend_score'] = st_result['score_0_100']
                     cached.loc[cached.index[-1], 'supertrend_points'] = st_result['total_points']
                     cached.loc[cached.index[-1], 'supertrend_bullish_flip'] = st_result['bullish_flip']
                     cached.loc[cached.index[-1], 'supertrend_bearish_flip'] = st_result['bearish_flip']
+                    
+                    # NEW: Add individual ST states to latest candle
+                    if interval in individual_st:
+                        for key, value in individual_st[interval].items():
+                            cached.loc[cached.index[-1], key] = value
+                    
                     update_cache(symbol, interval, cached)
+                    symbol_data[interval] = cached
                 
-                print(f"✓ {symbol}: ST={st_result['score_0_100']} ({st_result['total_points']}/6)")
+                print(f"✓ {symbol}: NEW Supertrend MTF score = {st_result['score_0_100']} ({st_result['total_points']}/6 points)")
+                print(f"  Bullish Flip: {st_result['bullish_flip']} | Bearish Flip: {st_result['bearish_flip']}")
+                print(f"  Individual ST states added for all timeframes\n")
                 
             except Exception as e:
-                print(f"✗ {symbol}: ST error: {str(e)}")
+                print(f"✗ {symbol}: Supertrend MTF error: {str(e)}")
+                import traceback
+                traceback.print_exc()
         
         # Calculate cross-timeframe Sumit MA score
         if '1m' in symbol_data and '5m' in symbol_data and '1h' in symbol_data:

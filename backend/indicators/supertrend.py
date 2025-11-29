@@ -251,3 +251,51 @@ def score_supertrend(st1_direction, st2_direction):
         base_score -= 15
     
     return max(0, min(100, base_score))
+def get_individual_supertrend_states(df_1m, df_5m, df_1h, st_settings=[(7, 3), (10, 2)]):
+    """
+    Get individual supertrend states for each timeframe
+    
+    Returns dict with individual ST directions and flips:
+    {
+        '1m': {
+            'st_7_3_direction': 1 or -1,
+            'st_7_3_flip': 'bullish'/'bearish'/None,
+            'st_10_2_direction': 1 or -1,
+            'st_10_2_flip': 'bullish'/'bearish'/None,
+        },
+        '5m': {...},
+        '1h': {...}
+    }
+    """
+    result = {}
+    
+    for tf_name, df in [('1m', df_1m), ('5m', df_5m), ('1h', df_1h)]:
+        if df is None or df.empty:
+            continue
+            
+        result[tf_name] = {}
+        
+        for period, mult in st_settings:
+            dir_col = f"dir_{period}_{mult}"
+            bull_flip_col = f"bullish_flip_{period}_{mult}"
+            bear_flip_col = f"bearish_flip_{period}_{mult}"
+            
+            if dir_col not in df.columns:
+                continue
+            
+            # Get latest direction
+            direction = df[dir_col].iloc[-1]
+            result[tf_name][f'st_{period}_{mult}_direction'] = int(direction) if not pd.isna(direction) else 0
+            
+            # Get latest flip status
+            bullish_flip = df[bull_flip_col].iloc[-1] if bull_flip_col in df.columns else 0
+            bearish_flip = df[bear_flip_col].iloc[-1] if bear_flip_col in df.columns else 0
+            
+            if bullish_flip:
+                result[tf_name][f'st_{period}_{mult}_flip'] = 'bullish'
+            elif bearish_flip:
+                result[tf_name][f'st_{period}_{mult}_flip'] = 'bearish'
+            else:
+                result[tf_name][f'st_{period}_{mult}_flip'] = None
+    
+    return result

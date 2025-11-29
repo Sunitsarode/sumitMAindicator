@@ -26,9 +26,9 @@ def _safe_float(value, default=0.0):
         return default
 
 def get_indicator_values(candle):
-    """Extract all indicator values from candle"""
+    """Extract all indicator values from candle including individual supertrends"""
     try:
-        return {
+        base_values = {
             'rsi': _safe_float(candle.get('rsi_score', 50), 50),
             'macd': _safe_float(candle.get('macd_score', 50), 50),
             'adx': _safe_float(candle.get('adx_score', 50), 50),
@@ -44,6 +44,21 @@ def get_indicator_values(candle):
             'cross_sma21': _safe_float(candle.get('cross_sma21', 0), 0),
             'price': _safe_float(candle.get('Close', 0), 0),
         }
+        
+        # NEW: Add individual supertrend states (7,3) and (10,2)
+        for period, mult in [(7, 3), (10, 2)]:
+            dir_key = f'st_{period}_{mult}_direction'
+            flip_key = f'st_{period}_{mult}_flip'
+            
+            if dir_key in candle:
+                base_values[dir_key] = _safe_int(candle.get(dir_key), 0)
+            
+            if flip_key in candle:
+                flip_value = candle.get(flip_key)
+                base_values[flip_key] = flip_value if flip_value in ['bullish', 'bearish'] else None
+        
+        return base_values
+        
     except Exception as e:
         logger.error(f"Error extracting indicator values: {e}")
         return {
@@ -51,9 +66,10 @@ def get_indicator_values(candle):
             'supertrend_points': 3, 'supertrend_bullish_flip': False,
             'supertrend_bearish_flip': False, 'sumit_ma': 50,
             'buy_signal_count': 0, 'sell_signal_count': 0,
-            'cross_avg': 0, 'cross_sma9': 0, 'cross_sma21': 0, 'price': 0
+            'cross_avg': 0, 'cross_sma9': 0, 'cross_sma21': 0, 'price': 0,
+            'st_7_3_direction': 0, 'st_10_2_direction': 0,
+            'st_7_3_flip': None, 'st_10_2_flip': None,
         }
-
 def calculate_sl_price(entry_price, direction):
     """Calculate stop loss price"""
     try:

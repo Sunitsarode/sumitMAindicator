@@ -1,12 +1,55 @@
 """
 Signal Evaluator - Evaluates entry/exit conditions
+ENHANCED: Now supports both combined AND individual supertrend checking
 """
 from utils.logging_config import logger
 from utils.config_manager import config
 
-# FOR : Load entry conditions from config 
-#LONG_CONDITIONS = config.ENTRY_CONDITIONS.get('long', {})
-#SHORT_CONDITIONS = config.ENTRY_CONDITIONS.get('short', {})
+# ============================================
+# ENTRY CONDITIONS WITH FULL OPTIONS
+# ============================================
+"""
+SUPERTREND OPTIONS:
+
+COMBINED (Current - checks all 6 supertrends together):
+- 'supertrend': Score 0-100 (all 6 combined)
+- 'supertrend_points': Raw count 0-6
+- 'supertrend_flip': 'bullish'/'bearish' (ANY of 6 flipped)
+
+INDIVIDUAL (New - check specific supertrends):
+For 1m timeframe:
+- 'st_7_3_direction': 1 (bullish) or -1 (bearish)
+- 'st_7_3_flip': 'bullish' or 'bearish' or None
+- 'st_10_2_direction': 1 or -1
+- 'st_10_2_flip': 'bullish' or 'bearish' or None
+
+For 5m timeframe: (access via data_5m)
+- Same keys: st_7_3_direction, st_7_3_flip, etc.
+
+For 1h timeframe: (access via data_1h)
+- Same keys: st_7_3_direction, st_7_3_flip, etc.
+
+EXAMPLES:
+
+# Use combined (original way):
+'supertrend': {'operator': '>', 'value': 50}
+'supertrend_flip': 'bullish'
+
+# Use individual ST(7,3) only:
+'st_7_3_direction': {'operator': '==', 'value': 1}
+'st_7_3_flip': 'bullish'
+
+# Use individual ST(10,2) only:
+'st_10_2_direction': {'operator': '==', 'value': 1}
+
+# Require BOTH individual STs to be bullish:
+'st_7_3_direction': {'operator': '==', 'value': 1},
+'st_10_2_direction': {'operator': '==', 'value': 1}
+
+# Mix: Combined score + specific flip:
+'supertrend': {'operator': '>', 'value': 50},
+'st_7_3_flip': 'bullish'
+"""
 
 # ============================================
 # LONG ENTRY CONDITIONS
@@ -16,15 +59,27 @@ LONG_CONDITIONS = {
         'rsi': {'operator': '>', 'value': 30},
         'supertrend': {'operator': '>', 'value': 50},
         'supertrend_flip': 'bullish',
-        'buy_signal_count': {'operator': '>', 'value': 12}
+        'buy_signal_count': {'operator': '>', 'value': 12},
+        
+        # NEW: Individual supertrend examples (commented out - uncomment to use)
+        # 'st_7_3_direction': {'operator': '==', 'value': 1},  # ST(7,3) must be bullish
+        # 'st_7_3_flip': 'bullish',  # ST(7,3) just flipped bullish
+        # 'st_10_2_direction': {'operator': '==', 'value': 1},  # ST(10,2) must be bullish
+        # 'st_10_2_flip': 'bullish',  # ST(10,2) just flipped bullish
     },
     '5m': {
         'rsi': {'operator': '>', 'value': 35},
         'sumit_ma': {'operator': '>', 'value': 40},
-        'buy_signal_count': {'operator': '>', 'value': 10}
+        'buy_signal_count': {'operator': '>', 'value': 10},
+        
+        # NEW: 5m individual supertrend examples
+        # 'st_7_3_direction': {'operator': '==', 'value': 1},
     },
     '1h': {
-        'sumit_ma': {'operator': '>', 'value': 30}
+        'sumit_ma': {'operator': '>', 'value': 30},
+        
+        # NEW: 1h individual supertrend examples
+        # 'st_10_2_direction': {'operator': '==', 'value': 1},
     },
     'cross': {
         'type': 'GOLDEN',
@@ -40,21 +95,32 @@ SHORT_CONDITIONS = {
         'rsi': {'operator': '<', 'value': 70},
         'supertrend': {'operator': '<', 'value': 50},
         'supertrend_flip': 'bearish',
-        'sell_signal_count': {'operator': '>', 'value': 12}
+        'sell_signal_count': {'operator': '>', 'value': 12},
+        
+        # NEW: Individual supertrend examples (commented out)
+        # 'st_7_3_direction': {'operator': '==', 'value': -1},  # ST(7,3) must be bearish
+        # 'st_7_3_flip': 'bearish',
+        # 'st_10_2_direction': {'operator': '==', 'value': -1},
     },
     '5m': {
         'rsi': {'operator': '<', 'value': 65},
         'sumit_ma': {'operator': '<', 'value': 60},
-        'sell_signal_count': {'operator': '>', 'value': 10}
+        'sell_signal_count': {'operator': '>', 'value': 10},
     },
     '1h': {
-        'sumit_ma': {'operator': '<', 'value': 70}
+        'sumit_ma': {'operator': '<', 'value': 70},
     },
     'cross': {
         'type': 'DEATH',
         'cross_avg_min': 60
     }
 }
+
+
+# ============================================
+# EVALUATION LOGIC (Updated to handle individual ST)
+# ============================================
+
 def detect_cross(curr, prev):
     """Detect SMA crossovers"""
     try:
@@ -93,10 +159,13 @@ def get_cross_info(curr, prev):
         return {'exact': None, 'sma9': 0, 'sma21': 0, 'cross_avg': 0}
 
 def evaluate_indicator_conditions(rules, data):
-    """Evaluate indicator conditions for a timeframe"""
+    """
+    Evaluate indicator conditions for a timeframe
+    ENHANCED: Now handles individual supertrend conditions
+    """
     try:
         for indicator, condition in rules.items():
-            # Handle supertrend_flip specially
+            # Handle supertrend_flip specially (combined)
             if indicator == 'supertrend_flip':
                 if condition == 'bullish' and not data.get('supertrend_bullish_flip', False):
                     return False
@@ -104,7 +173,16 @@ def evaluate_indicator_conditions(rules, data):
                     return False
                 continue
             
-            # Handle dict format from config.json
+            # NEW: Handle individual ST flips (st_7_3_flip, st_10_2_flip)
+            if indicator.endswith('_flip'):
+                actual_flip = data.get(indicator)
+                if condition == 'bullish' and actual_flip != 'bullish':
+                    return False
+                if condition == 'bearish' and actual_flip != 'bearish':
+                    return False
+                continue
+            
+            # Handle dict format from config or inline
             if isinstance(condition, dict):
                 op = condition.get('operator')
                 value = condition.get('value')
@@ -115,6 +193,11 @@ def evaluate_indicator_conditions(rules, data):
                 continue
             
             actual = data.get(indicator, 50)
+            
+            # Handle None values for individual ST (not available yet)
+            if actual is None:
+                logger.warning(f"Indicator {indicator} not available in data")
+                return False
             
             if op == '>' and not (actual > value):
                 return False
